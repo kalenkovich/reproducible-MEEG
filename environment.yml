@@ -1,0 +1,8 @@
+name: reproduction
+channels:
+  - defaults
+  - conda-forge
+  - bioconda
+dependencies:
+  - python=3.9.4
+  - bioconda::snakemake-minimal=6.2.1

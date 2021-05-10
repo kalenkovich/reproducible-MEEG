@@ -12,7 +12,7 @@ Code that attempts to reproduce "A Reproducible MEG/EEG Group Study With the MNE
     conda env create -n reproduction -f environment.yml
     conda activate reproduction
     ```
-5. Download the archive files from openfmri:
+5. Get the subject MEG data in BIDS format:
 ```sh
-snakemake download_data_from_openfmri --cores <n>
+snakemake get_all_subjects_meg_data --cores <n>
 ```

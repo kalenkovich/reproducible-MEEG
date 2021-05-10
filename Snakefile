@@ -1,5 +1,7 @@
 from pathlib import Path
 import os
+from zipfile import ZipFile, Path as ZipPath
+
 import requests
 from urllib.parse import urljoin
 
@@ -41,6 +43,24 @@ def filter_bids_dir(bids_root, subject=None, session=None, data_type=None):
                  for item in ([session_folder / f'{data_type}'] if data_type else list(session_folder.iterdir()))                 ]
 
     return to_unpack
+
+
+def unzip_bids_archive(archive_path, bids_root, subject=None, session=None, data_type=None):
+    with ZipFile(archive_path,'r') as zip_file:
+        # All the archives contain a single folder in the root called 'ds000117_R1.0.0/' which we will skip.
+        zip_path = ZipPath(zip_file, 'ds000117_R1.0.0/')
+        # Filter the contents by subject, session, and/or data type.
+        to_unpack = filter_bids_dir(zip_path, subject=subject, session=session, data_type=data_type)
+        # Recurse the list of folders/files and copy the files to bids_dir
+        while to_unpack:
+            item = to_unpack.pop()
+            if item.is_file():
+                relative_path = Path(str(item)).relative_to(Path(str(zip_path)))
+                output_path = bids_root / relative_path
+                output_path.parent.mkdir(parents=True, exist_ok=True)
+                output_path.write_bytes(item.read_bytes())
+            else:
+                to_unpack += list(item.iterdir())
 
 
 # Folders

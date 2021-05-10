@@ -66,8 +66,11 @@ def unzip_bids_archive(archive_path, bids_root, subject=None, session=None, data
 # Folders
 data_dir = Path(os.environ['reproduction-data'])
 downloads_dir = data_dir / 'downloads'
+bids_dir = data_dir / 'bids-2'
 
 # Templates
+subject_json_template = (bids_dir / 'sub-{subject_number}' / 'ses-meg' /
+                'sub-{subject_number}_ses-meg_task-facerecognition_proc-tsss_meg.json')
 
 # Other file-related variables
 openfmri_url_prefix = 'https://s3.amazonaws.com/openneuro/ds000117/ds000117_R1.0.0/compressed/'
@@ -78,9 +81,25 @@ openfmri_zip_files = [
     'ds000117_R1.0.0_sub13-16.zip',
 ]
 
-rule download_data_from_openfmri:
+
+rule get_all_subjects_meg_data:
     input:
-        [downloads_dir / filename for filename in openfmri_zip_files]
+        expand(subject_json_template, subject_number=[f'{i:02d}' for i in range(1, 16 + 1)])
+
+def find_archive_with_subject(wildcards):
+    k = int(wildcards.subject_number)
+    start = (k - 1) // 4  * 4 + 1
+    end = start + 3
+    return downloads_dir / f'ds000117_R1.0.0_sub{start:02d}-{end:02}.zip'
+
+rule unpack_single_subject_meg_data:
+    input:
+        archive = find_archive_with_subject
+    output:
+        json = subject_json_template
+    run:
+        unzip_bids_archive(archive_path=input.archive, bids_root=bids_dir, subject=wildcards.subject_number,
+                           session='meg')
 
 rule download_single_file_from_openfmri:
     output:

@@ -71,6 +71,8 @@ bids_dir = data_dir / 'bids'
 # Templates
 subject_json_template = (bids_dir / 'sub-{subject_number}' / 'ses-meg' /
                 'sub-{subject_number}_ses-meg_task-facerecognition_proc-tsss_meg.json')
+run_template = (bids_dir / 'sub-{subject_number}' / 'ses-meg' / 'meg' /
+                'sub-{subject_number}_ses-meg_task-facerecognition_run-{run_id}_meg.fif')
 
 # Other file-related variables
 openfmri_url_prefix = 'https://s3.amazonaws.com/openneuro/ds000117/ds000117_R1.0.0/compressed/'
@@ -83,8 +85,12 @@ openfmri_zip_files = [
 
 
 rule get_all_subjects_meg_data:
+# Pseudo-rule to connect run files to the json file common to all runs
+rule get_run:
     input:
-        expand(subject_json_template, subject_number=[f'{i:02d}' for i in range(1, 16 + 1)])
+        subject_json_template
+    output:
+        run_template
 
 def find_archive_with_subject(wildcards):
     k = int(wildcards.subject_number)

@@ -67,12 +67,16 @@ def unzip_bids_archive(archive_path, bids_root, subject=None, session=None, data
 data_dir = Path(os.environ['reproduction-data'])
 downloads_dir = data_dir / 'downloads'
 bids_dir = data_dir / 'bids'
+derivatives_dir = bids_dir / 'derivatives'
+preprocessing_dir = derivatives_dir / '01_preprocessing'
 
 # Templates
 subject_json_template = (bids_dir / 'sub-{subject_number}' / 'ses-meg' /
                 'sub-{subject_number}_ses-meg_task-facerecognition_proc-tsss_meg.json')
 run_template = (bids_dir / 'sub-{subject_number}' / 'ses-meg' / 'meg' /
                 'sub-{subject_number}_ses-meg_task-facerecognition_run-{run_id}_meg.fif')
+events_template = (preprocessing_dir / 'sub-{subject_number}' / 'ses-meg' / 'meg' /
+                'sub-{subject_number}_ses-meg_task-facerecognition_run-{run_id}_eve.fif')
 
 # Other file-related variables
 openfmri_url_prefix = 'https://s3.amazonaws.com/openneuro/ds000117/ds000117_R1.0.0/compressed/'

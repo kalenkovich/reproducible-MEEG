@@ -1,9 +1,10 @@
 from pathlib import Path
 import os
 from zipfile import ZipFile, Path as ZipPath
-
 import requests
 from urllib.parse import urljoin
+
+import mne
 
 
 # Helper functions
@@ -67,10 +68,16 @@ def unzip_bids_archive(archive_path, bids_root, subject=None, session=None, data
 data_dir = Path(os.environ['reproduction-data'])
 downloads_dir = data_dir / 'downloads'
 bids_dir = data_dir / 'bids'
+derivatives_dir = bids_dir / 'derivatives'
+preprocessing_dir = derivatives_dir / '01_preprocessing'
 
 # Templates
 subject_json_template = (bids_dir / 'sub-{subject_number}' / 'ses-meg' /
                 'sub-{subject_number}_ses-meg_task-facerecognition_proc-tsss_meg.json')
+run_template = (bids_dir / 'sub-{subject_number}' / 'ses-meg' / 'meg' /
+                'sub-{subject_number}_ses-meg_task-facerecognition_run-{run_id}_meg.fif')
+events_template = (preprocessing_dir / 'sub-{subject_number}' / 'ses-meg' / 'meg' /
+                'sub-{subject_number}_ses-meg_task-facerecognition_run-{run_id}_eve.fif')
 
 # Other file-related variables
 openfmri_url_prefix = 'https://s3.amazonaws.com/openneuro/ds000117/ds000117_R1.0.0/compressed/'
@@ -82,9 +89,34 @@ openfmri_zip_files = [
 ]
 
 
-rule get_all_subjects_meg_data:
+rule get_all_events_data:
     input:
-        expand(subject_json_template, subject_number=[f'{i:02d}' for i in range(1, 16 + 1)])
+        expand(events_template,
+               subject_number=[f'{i:02d}' for i in range(1, 16 + 1)],
+               run_id=[f'{i:02d}' for i in range(1, 6 + 1)])
+
+def extract_events(run_path, events_path):
+    raw = mne.io.read_raw_fif(str(run_path))
+    mask = 4096 + 256  # mask for excluding high order bits
+    events = mne.find_events(raw, stim_channel='STI101',
+                             consecutive='increasing', mask=mask,
+                             mask_type='not_and', min_duration=0.003)
+    mne.write_events(str(events_path), events)
+
+rule extract_events:
+    input:
+        run = run_template
+    output:
+        events = events_template
+    run:
+        extract_events(input.run, output.events)
+
+# Pseudo-rule to connect run files to the json file common to all runs
+rule get_run:
+    input:
+        subject_json_template
+    output:
+        run_template
 
 def find_archive_with_subject(wildcards):
     k = int(wildcards.subject_number)

@@ -1,9 +1,10 @@
 from pathlib import Path
 import os
 from zipfile import ZipFile, Path as ZipPath
-
 import requests
 from urllib.parse import urljoin
+
+import mne
 
 
 # Helper functions
@@ -88,7 +89,28 @@ openfmri_zip_files = [
 ]
 
 
-rule get_all_subjects_meg_data:
+rule get_all_events_data:
+    input:
+        expand(events_template,
+               subject_number=[f'{i:02d}' for i in range(1, 16 + 1)],
+               run_id=[f'{i:02d}' for i in range(1, 6 + 1)])
+
+def extract_events(run_path, events_path):
+    raw = mne.io.read_raw_fif(str(run_path))
+    mask = 4096 + 256  # mask for excluding high order bits
+    events = mne.find_events(raw, stim_channel='STI101',
+                             consecutive='increasing', mask=mask,
+                             mask_type='not_and', min_duration=0.003)
+    mne.write_events(str(events_path), events)
+
+rule extract_events:
+    input:
+        run = run_template
+    output:
+        events = events_template
+    run:
+        extract_events(input.run, output.events)
+
 # Pseudo-rule to connect run files to the json file common to all runs
 rule get_run:
     input:

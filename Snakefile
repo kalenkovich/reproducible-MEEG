@@ -101,13 +101,16 @@ rule all:
                          subject_number=[f'{i:02d}' for i in range(1, 16 + 1)],
                          run_id=[f'{i:02d}' for i in range(1, 6 + 1)])
 
+def linear_filter(run, output_path):
+    pass
+
 rule apply_linear_filter:
     input:
-        run_template
+        run = run_template
     output:
-        filtered_template
+        filtered = filtered_template
     run:
-        pass
+        linear_filter(input.run, output.filtered)
 
 def extract_events(run_path, events_path):
     raw = mne.io.read_raw_fif(str(run_path))

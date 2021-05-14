@@ -78,6 +78,8 @@ run_template = (bids_dir / 'sub-{subject_number}' / 'ses-meg' / 'meg' /
                 'sub-{subject_number}_ses-meg_task-facerecognition_run-{run_id}_meg.fif')
 events_template = (preprocessing_dir / 'sub-{subject_number}' / 'ses-meg' / 'meg' /
                 'sub-{subject_number}_ses-meg_task-facerecognition_run-{run_id}_eve.fif')
+filtered_template = (preprocessing_dir / 'sub-{subject_number}' / 'ses-meg' / 'meg' /
+                     'sub-{subject_number}_ses-meg_task-facerecognition_run-{run_id}_filtered.fif')
 
 # Other file-related variables
 openfmri_url_prefix = 'https://s3.amazonaws.com/openneuro/ds000117/ds000117_R1.0.0/compressed/'
@@ -89,11 +91,23 @@ openfmri_zip_files = [
 ]
 
 
-rule get_all_events_data:
+rule all:
     input:
-        expand(events_template,
-               subject_number=[f'{i:02d}' for i in range(1, 16 + 1)],
-               run_id=[f'{i:02d}' for i in range(1, 6 + 1)])
+         events=expand(events_template,
+                       subject_number=[f'{i:02d}' for i in range(1, 16 + 1)],
+                       run_id=[f'{i:02d}' for i in range(1, 6 + 1)]),
+
+         filtered=expand(filtered_template,
+                         subject_number=[f'{i:02d}' for i in range(1, 16 + 1)],
+                         run_id=[f'{i:02d}' for i in range(1, 6 + 1)])
+
+rule apply_linear_filter:
+    input:
+        run_template
+    output:
+        filtered_template
+    run:
+        pass
 
 def extract_events(run_path, events_path):
     raw = mne.io.read_raw_fif(str(run_path))

@@ -12,7 +12,7 @@ Code that attempts to reproduce "A Reproducible MEG/EEG Group Study With the MNE
     conda env create -n reproduction -f environment.yml
     conda activate reproduction
     ```
-5. Extract the events data from MEG files:
+5. Extract the events data from MEG files and run linear filtering:
 ```sh
-snakemake get_all_events_data --cores <n>
+snakemake all --cores <n>
 ```

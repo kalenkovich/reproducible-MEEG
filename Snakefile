@@ -63,6 +63,8 @@ def unzip_bids_archive(archive_path, bids_root, subject=None, session=None, data
             else:
                 to_unpack += list(item.iterdir())
 
+# Configuration constants
+L_FREQ = None
 
 # Folders
 data_dir = Path(os.environ['reproduction-data'])
@@ -78,6 +80,8 @@ run_template = (bids_dir / 'sub-{subject_number}' / 'ses-meg' / 'meg' /
                 'sub-{subject_number}_ses-meg_task-facerecognition_run-{run_id}_meg.fif')
 events_template = (preprocessing_dir / 'sub-{subject_number}' / 'ses-meg' / 'meg' /
                 'sub-{subject_number}_ses-meg_task-facerecognition_run-{run_id}_eve.fif')
+filtered_template = (preprocessing_dir / 'sub-{subject_number}' / 'ses-meg' / 'meg' /
+                     'sub-{subject_number}_ses-meg_task-facerecognition_run-{run_id}_filtered.fif')
 
 # Other file-related variables
 openfmri_url_prefix = 'https://s3.amazonaws.com/openneuro/ds000117/ds000117_R1.0.0/compressed/'
@@ -89,11 +93,51 @@ openfmri_zip_files = [
 ]
 
 
-rule get_all_events_data:
+rule all:
     input:
-        expand(events_template,
-               subject_number=[f'{i:02d}' for i in range(1, 16 + 1)],
-               run_id=[f'{i:02d}' for i in range(1, 6 + 1)])
+         events=expand(events_template,
+                       subject_number=[f'{i:02d}' for i in range(1, 16 + 1)],
+                       run_id=[f'{i:02d}' for i in range(1, 6 + 1)]),
+
+         filtered=expand(filtered_template,
+                         subject_number=[f'{i:02d}' for i in range(1, 16 + 1)],
+                         run_id=[f'{i:02d}' for i in range(1, 6 + 1)])
+
+
+def linear_filter(run_path, output_path):
+    raw = mne.io.read_raw_fif(run_path, preload=True, verbose='error')
+    raw.set_channel_types({'EEG061': 'eog',
+                           'EEG062': 'eog',
+                           'EEG063': 'ecg',
+                           'EEG064': 'misc'})  # EEG064 free-floating el.
+    raw.rename_channels({'EEG061': 'EOG061',
+                         'EEG062': 'EOG062',
+                         'EEG063': 'ECG063'})
+
+    # Band-pass the data channels (MEG and EEG)
+    raw.filter(
+        l_freq=L_FREQ, h_freq=40, l_trans_bandwidth='auto', h_trans_bandwidth='auto',
+        filter_length='auto', phase='zero', fir_window='hamming',
+        fir_design='firwin')
+
+    # High-pass EOG to get reasonable thresholds in autoreject
+    picks_eog = mne.pick_types(raw.info, meg=False, eog=True)
+    raw.filter(
+        l_freq=1., h_freq=None, picks=picks_eog, l_trans_bandwidth='auto',
+        filter_length='auto', phase='zero', fir_window='hann',
+        fir_design='firwin')
+
+    # Save
+    raw.save(output_path)
+
+rule apply_linear_filter:
+    input:
+        run = run_template
+    output:
+        filtered = filtered_template
+    run:
+        linear_filter(input.run, output.filtered)
+
 
 def extract_events(run_path, events_path):
     raw = mne.io.read_raw_fif(str(run_path))

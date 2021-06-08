@@ -20,6 +20,8 @@ def download_file_from_url(url, save_to):
 
 # Configuration constants
 L_FREQS = (None, 1)
+ICA_N_COMPONENTS = 0.999
+RANDOM_STATE = 42
 
 # Folders
 data_dir = Path(os.environ['reproduction-data'])
@@ -59,7 +61,11 @@ rule all:
 
 
 def calculate_ica(run_paths, output_path):
-    pass
+    raw = mne.concatenate_raws([mne.io.read_raw_fif(run_path) for run_path in run_paths])
+    ica = mne.preprocessing.ICA(method='fastica',random_state=RANDOM_STATE, n_components=ICA_N_COMPONENTS)
+    picks = mne.pick_types(raw.info, meg=True, eeg=False, eog=False, stim=False, exclude='bads')
+    ica.fit(raw, picks=picks, reject=dict(grad=4000e-13, mag=4e-12), decim=11)
+    ica.save(output_path)
 
 
 rule ica:

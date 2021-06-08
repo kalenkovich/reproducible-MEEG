@@ -58,13 +58,17 @@ rule all:
         icas = expand(ica_template, subject_number=subject_numbers)
 
 
+def calculate_ica(run_paths, output_path):
+    pass
+
+
 rule ica:
     input:
         runs = expand(filtered_template, run_id=run_ids, l_freq=1, allow_missing=True)
     output:
         ica = ica_template
     run:
-        pass
+        calculate_ica(input.runs, output.ica)
 
 
 def linear_filter(run_path, output_path, l_freq):

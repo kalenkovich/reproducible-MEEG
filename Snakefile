@@ -37,6 +37,8 @@ events_template = (bids_dir / 'sub-{subject_number}' / 'ses-meg' / 'meg' /
                 'sub-{subject_number}_ses-meg_task-facerecognition_run-{run_id}_events.tsv')
 filtered_template = (preprocessing_dir / 'sub-{subject_number}' / 'ses-meg' / 'meg' /
                      'sub-{subject_number}_ses-meg_task-facerecognition_run-{run_id}_filteredHighPass{l_freq}.fif')
+ica_template = (preprocessing_dir / 'sub-{subject_number}' / 'ses-meg' / 'meg' /
+                'sub-{subject_number}_ses-meg_task-facerecognition_filtered.fif')
 
 # Other file-related variables
 openneuro_url_prefix = 'https://openneuro.org/crn/datasets/ds000117/snapshots/1.0.4/files/'
@@ -52,7 +54,17 @@ run_ids = [f'{i:02d}' for i in range(1,6 + 1)]
 rule all:
     input:
         events = expand(events_template, subject_number=subject_numbers, run_id=run_ids),
-        filtered = expand(filtered_template, subject_number=subject_numbers, run_id=run_ids, l_freq=L_FREQS)
+        filtered = expand(filtered_template, subject_number=subject_numbers, run_id=run_ids, l_freq=L_FREQS),
+        icas = expand(ica_template, subject_number=subject_numbers)
+
+
+rule ica:
+    input:
+        runs = expand(filtered_template, run_id=run_ids, l_freq=1, allow_missing=True)
+    output:
+        ica = ica_template
+    run:
+        pass
 
 
 def linear_filter(run_path, output_path, l_freq):

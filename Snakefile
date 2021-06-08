@@ -42,16 +42,17 @@ filtered_template = (preprocessing_dir / 'sub-{subject_number}' / 'ses-meg' / 'm
 openneuro_url_prefix = 'https://openneuro.org/crn/datasets/ds000117/snapshots/1.0.4/files/'
 
 
+# Helper variables
+subject_numbers = [f'{i:02d}' for i in range(1,16 + 1)]
+run_ids = [f'{i:02d}' for i in range(1,6 + 1)]
+
+
+# Rules and functions that execute them
+
 rule all:
     input:
-         events=expand(events_template,
-                       subject_number=[f'{i:02d}' for i in range(1, 16 + 1)],
-                       run_id=[f'{i:02d}' for i in range(1, 6 + 1)]),
-
-         filtered=expand(filtered_template,
-                         subject_number=[f'{i:02d}' for i in range(1, 16 + 1)],
-                         run_id=[f'{i:02d}' for i in range(1, 6 + 1)],
-                         l_freq=L_FREQS)
+        events = expand(events_template, subject_number=subject_numbers, run_id=run_ids),
+        filtered = expand(filtered_template, subject_number=subject_numbers, run_id=run_ids, l_freq=L_FREQS)
 
 
 def linear_filter(run_path, output_path, l_freq):

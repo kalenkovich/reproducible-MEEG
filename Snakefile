@@ -64,7 +64,7 @@ def unzip_bids_archive(archive_path, bids_root, subject=None, session=None, data
                 to_unpack += list(item.iterdir())
 
 # Configuration constants
-L_FREQ = None
+L_FREQS = (None, 1)
 
 # Folders
 data_dir = Path(os.environ['reproduction-data'])
@@ -81,7 +81,7 @@ run_template = (bids_dir / 'sub-{subject_number}' / 'ses-meg' / 'meg' /
 events_template = (preprocessing_dir / 'sub-{subject_number}' / 'ses-meg' / 'meg' /
                 'sub-{subject_number}_ses-meg_task-facerecognition_run-{run_id}_eve.fif')
 filtered_template = (preprocessing_dir / 'sub-{subject_number}' / 'ses-meg' / 'meg' /
-                     'sub-{subject_number}_ses-meg_task-facerecognition_run-{run_id}_filtered.fif')
+                     'sub-{subject_number}_ses-meg_task-facerecognition_run-{run_id}_filteredHighPass{l_freq}.fif')
 
 # Other file-related variables
 openfmri_url_prefix = 'https://s3.amazonaws.com/openneuro/ds000117/ds000117_R1.0.0/compressed/'
@@ -101,10 +101,11 @@ rule all:
 
          filtered=expand(filtered_template,
                          subject_number=[f'{i:02d}' for i in range(1, 16 + 1)],
-                         run_id=[f'{i:02d}' for i in range(1, 6 + 1)])
+                         run_id=[f'{i:02d}' for i in range(1, 6 + 1)],
+                         l_freq=L_FREQS)
 
 
-def linear_filter(run_path, output_path):
+def linear_filter(run_path, output_path, l_freq):
     raw = mne.io.read_raw_fif(run_path, preload=True, verbose='error')
     raw.set_channel_types({'EEG061': 'eog',
                            'EEG062': 'eog',
@@ -116,7 +117,7 @@ def linear_filter(run_path, output_path):
 
     # Band-pass the data channels (MEG and EEG)
     raw.filter(
-        l_freq=L_FREQ, h_freq=40, l_trans_bandwidth='auto', h_trans_bandwidth='auto',
+        l_freq=l_freq, h_freq=40, l_trans_bandwidth='auto', h_trans_bandwidth='auto',
         filter_length='auto', phase='zero', fir_window='hamming',
         fir_design='firwin')
 
@@ -136,7 +137,8 @@ rule apply_linear_filter:
     output:
         filtered = filtered_template
     run:
-        linear_filter(input.run, output.filtered)
+        l_freq = None if wildcards.l_freq == 'None' else float(wildcards.l_freq)
+        linear_filter(input.run, output.filtered, l_freq)
 
 
 def extract_events(run_path, events_path):

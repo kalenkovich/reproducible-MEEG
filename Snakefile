@@ -172,15 +172,16 @@ rule extract_bad_channels:
             f.writelines('\n'.join(bads))
 
 
-def make_epochs(run_paths, bad_paths, epoched_path):
+def make_epochs(filtered_paths, bad_paths, events_paths, epoched_path):
     pass
 
 
 rule make_epochs:
     input:
-        runs = expand(filtered_template, run_id=run_ids, l_freq=1, allow_missing=True),
-        bads = expand(bad_channels_template, run_id=run_ids, l_freq=1, allow_missing=True)
+        filtered = expand(filtered_template, run_id=run_ids, l_freq=None, allow_missing=True),
+        bads = expand(bad_channels_template, run_id=run_ids, allow_missing=True),
+        events = expand(events_template, run_id=run_ids, allow_missing=True)
     output:
         epoched = epoched_template
     run:
-        make_epochs(run_paths=input.runs, bads=input.bads, epoched_path=output.epoched)
+        make_epochs(run_paths=input.filtered, bads=input.bads, events=input.events, epoched_path=output.epoched)

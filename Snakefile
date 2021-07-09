@@ -48,6 +48,8 @@ maxfilter_log_template = (openneuro_maxfiltered_dir / 'sub-{subject_number}' / '
                           'sub-{subject_number}_ses-meg_task-facerecognition_run-{run_id}_proc-sss_log.txt')
 bad_channels_template = (preprocessing_dir / 'sub-{subject_number}' / 'ses-meg' / 'meg' /
                          'sub-{subject_number}_ses-meg_task-facerecognition_run-{run_id}_bads.fif')
+epoched_template = (preprocessing_dir / 'sub-{subject_number}' / 'ses-meg' / 'meg' /
+                         'sub-{subject_number}_ses-meg_task-facerecognition_epo.fif')
 
 # Other file-related variables
 openneuro_url_prefix = 'https://openneuro.org/crn/datasets/ds000117/snapshots/1.0.4/files/'
@@ -65,7 +67,8 @@ rule all:
         events = expand(events_template, subject_number=subject_numbers, run_id=run_ids),
         filtered = expand(filtered_template, subject_number=subject_numbers, run_id=run_ids, l_freq=L_FREQS),
         icas = expand(ica_template, subject_number=subject_numbers),
-        bad_channels = expand(bad_channels_template, subject_number=subject_numbers, run_id=run_ids)
+        bad_channels = expand(bad_channels_template, subject_number=subject_numbers, run_id=run_ids),
+        epoched = expand(epoched_template, subject_number=subject_numbers)
 
 
 def calculate_ica(run_paths, output_path):
@@ -167,3 +170,13 @@ rule extract_bad_channels:
 
         with open(output.bad_channels, 'w', encoding='utf=8') as f:
             f.writelines('\n'.join(bads))
+
+
+rule make_epochs:
+    input:
+        runs = expand(filtered_template, run_id=run_ids, l_freq=1, allow_missing=True),
+        bads = expand(bad_channels_template, run_id=run_ids, l_freq=1, allow_missing=True)
+    output:
+        epoched = epoched_template
+    run:
+        pass

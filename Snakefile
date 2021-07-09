@@ -41,6 +41,10 @@ filtered_template = (preprocessing_dir / 'sub-{subject_number}' / 'ses-meg' / 'm
                      'sub-{subject_number}_ses-meg_task-facerecognition_run-{run_id}_filteredHighPass{l_freq}.fif')
 ica_template = (preprocessing_dir / 'sub-{subject_number}' / 'ses-meg' / 'meg' /
                 'sub-{subject_number}_ses-meg_task-facerecognition_filtered.fif')
+maxfilter_log_template = (openneuro_maxfiltered_dir / 'sub-{subject_number}' / 'ses-meg' / 'meg' /
+                          'sub-{subject_number}_ses-meg_task-facerecognition_run-{run_id}_proc-sss_log.txt')
+bad_channels_template = (preprocessing_dir / 'sub-{subject_number}' / 'ses-meg' / 'meg' /
+                         'sub-{subject_number}_ses-meg_task-facerecognition_run-{run_id}_bads.fif')
 
 # Other file-related variables
 openneuro_url_prefix = 'https://openneuro.org/crn/datasets/ds000117/snapshots/1.0.4/files/'
@@ -57,7 +61,8 @@ rule all:
     input:
         events = expand(events_template, subject_number=subject_numbers, run_id=run_ids),
         filtered = expand(filtered_template, subject_number=subject_numbers, run_id=run_ids, l_freq=L_FREQS),
-        icas = expand(ica_template, subject_number=subject_numbers)
+        icas = expand(ica_template, subject_number=subject_numbers),
+        bad_channels = expand(bad_channels_template, subject_number=subject_numbers, run_id=run_ids)
 
 
 def calculate_ica(run_paths, output_path):
@@ -139,3 +144,23 @@ rule download_from_openneuro:
         # (see https://stackoverflow.com/q/55202875/)
         url = urljoin(openneuro_url_prefix, './' + ':'.join(relative_path.parts))
         download_file_from_url(url=url, save_to=output.file_path)
+
+
+# The bad channels are the same as the ones used during applying MaxFilterint the data by the dataset authors
+rule extract_bad_channels:
+    input:
+        maxfilter_log = maxfilter_log_template
+    output:
+        bad_channels = bad_channels_template
+    run:
+        # code adapted from 03-maxwell_filtering.py
+        bads = []
+        with open(input.maxfilter_log, mode='r', encoding='utf-8') as fid:
+            for line in fid:
+                if line.startswith('Static bad channels'):
+                    chs = line.split(':')[-1].split()
+                    bads = ['MEG%04d' % int(ch) for ch in chs]
+                    break
+
+        with open(output.bad_channels, 'w', encoding='utf=8') as f:
+            f.writelines('\n'.join(bads))

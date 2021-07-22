@@ -2,6 +2,8 @@ from pathlib import Path
 import os
 import re
 from zipfile import ZipFile, Path as ZipPath
+
+import pandas as pd
 import requests
 from urllib.parse import urljoin
 
@@ -55,6 +57,23 @@ openneuro_url_prefix = 'https://openneuro.org/crn/datasets/ds000117/snapshots/1.
 # Helper variables
 subject_numbers = [f'{i:02d}' for i in range(1,16 + 1)]
 run_ids = [f'{i:02d}' for i in range(1,6 + 1)]
+
+
+# Experiment-specific variables
+EVENTS_ID = {
+    'face/famous/first': 5,
+    'face/famous/immediate': 6,
+    'face/famous/long': 7,
+    'face/unfamiliar/first': 13,
+    'face/unfamiliar/immediate': 14,
+    'face/unfamiliar/long': 15,
+    'scrambled/first': 17,
+    'scrambled/immediate': 18,
+    'scrambled/long': 19,
+}
+TMIN = -0.2
+TMAX = 2.9  # min duration between onsets: (400 fix + 800 stim + 1700 ISI) ms
+REJECT_TMAX = 0.8  # duration we really care about
 
 
 # Rules and functions that execute them
@@ -169,16 +188,69 @@ rule extract_bad_channels:
             f.writelines('\n'.join(bads))
 
 
-def make_epochs(filtered_paths, bad_paths, events_paths, epoched_path):
-    pass
+def _read_bads(bads_path):
+    bads = list()
+    with open(bads_path,encoding='utf-8') as f:
+        for line in f:
+            bads.append(line.strip())
+    return bads
+
+
+def _read_events(events_path, first_samp):
+    events_df = pd.read_csv(events_path, delimiter='\t')
+    events = events_df[['onset_sample', 'duration', 'trigger']].values
+    # In FIF files and mne-python, the first sample is not counted as the first sample for reasons.
+    # See https://mne.tools/dev/glossary.html#term-first_samp
+    events[:, 0] += first_samp
+    return events
+
+
+def make_epochs(filtered_paths, bad_paths, events_paths, l_freq, epoched_path):
+    # Load all runs, all events, set bad channels
+    raw_list = list()
+    events_list = list()
+    for run_path, bads_path, events_path in zip(filtered_paths, bad_paths, events_paths):
+        bads = _read_bads(bads_path)
+        raw = mne.io.read_raw_fif(run_path, preload=True)
+        events = _read_events(events_path, raw.first_samp)
+
+        # Data in events.tsv BIDS files already accounts for the trigger-stimulus delay so we don't need to.
+        # delay = int(round(0.0345 * raw.info['sfreq']))
+        # events[:, 0] = events[:, 0] + delay
+
+        events_list.append(events)
+
+        raw.info['bads'] = bads
+        raw.interpolate_bads()
+        raw_list.append(raw)
+
+    # Concatenate the runs
+    raw, events = mne.concatenate_raws(raw_list, events_list=events_list)
+    raw.set_eeg_reference(projection=True)
+    del raw_list
+
+    # `exclude` is empty so that the bad channels are not excluded
+    picks = mne.pick_types(raw.info, meg=True, eeg=True, stim=True, eog=True, exclude=[])
+
+    # Epoch the data
+    baseline = (None, 0) if l_freq is None else None
+    epochs = mne.Epochs(raw, events, event_id=EVENTS_ID, tmin=TMIN, tmax=TMAX, proj=True,
+                        picks=picks, baseline=baseline, preload=False,
+                        decim=5, reject=None, reject_tmax=REJECT_TMAX)
+    epochs.save(epoched_path)
+
+
+# Epoching is done on the non-highpassed data
+EPOCHS_L_FREQ = None
 
 
 rule make_epochs:
     input:
-        filtered = expand(filtered_template, run_id=run_ids, l_freq=None, allow_missing=True),
+        filtered = expand(filtered_template, run_id=run_ids, l_freq=EPOCHS_L_FREQ, allow_missing=True),
         bads = expand(bad_channels_template, run_id=run_ids, allow_missing=True),
         events = expand(events_template, run_id=run_ids, allow_missing=True)
     output:
         epoched = epoched_template
     run:
-        make_epochs(run_paths=input.filtered, bads=input.bads, events=input.events, epoched_path=output.epoched)
+        make_epochs(filtered_paths=input.filtered, bad_paths=input.bads, events_paths=input.events,
+                    l_freq=EPOCHS_L_FREQ, epoched_path=output.epoched)

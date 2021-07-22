@@ -9,6 +9,9 @@ import mne
 
 
 # Helper functions
+from mne.preprocessing import create_ecg_epochs, create_eog_epochs
+
+
 def download_file_from_url(url, save_to):
     response = requests.get(url)
     # Raise an error if there was a problem
@@ -49,6 +52,10 @@ maxfilter_log_template = (openneuro_maxfiltered_dir / 'sub-{subject_number}' / '
                           'sub-{subject_number}_ses-meg_task-facerecognition_run-{run_id}_proc-sss_log.txt')
 bad_channels_template = (preprocessing_dir / 'sub-{subject_number}' / 'ses-meg' / 'meg' /
                          'sub-{subject_number}_ses-meg_task-facerecognition_run-{run_id}_bads.fif')
+concatenated_raw_template = (preprocessing_dir / 'sub-{subject_number}' / 'ses-meg' / 'meg' /
+                             'sub-{subject_number}_ses-meg_task-facerecognition_proc-sss_megConcatenated.fif')
+concatenated_events_template = (preprocessing_dir / 'sub-{subject_number}' / 'ses-meg' / 'meg' /
+                                'sub-{subject_number}_ses-meg_task-facerecognition_proc-sss_eventsConcatenated.fif')
 epoched_template = (preprocessing_dir / 'sub-{subject_number}' / 'ses-meg' / 'meg' /
                          'sub-{subject_number}_ses-meg_task-facerecognition_epo.fif')
 
@@ -207,7 +214,7 @@ def _read_events(events_path, first_samp):
     return events
 
 
-def make_epochs(filtered_paths, bad_paths, events_paths, l_freq, epoched_path):
+def concatenate_runs(filtered_paths, bad_paths, events_paths, concatenated_raw_path, concatenated_events_path):
     # Load all runs, all events, set bad channels
     raw_list = list()
     events_list = list()
@@ -231,6 +238,31 @@ def make_epochs(filtered_paths, bad_paths, events_paths, l_freq, epoched_path):
     raw.set_eeg_reference(projection=True)
     del raw_list
 
+    raw.save(concatenated_raw_path)
+    mne.write_events(concatenated_events_path, events)
+
+
+# Epoching and artifact searching is done on the non-highpassed data
+EPOCHS_L_FREQ = None
+
+
+rule concatenate_runs:
+    input:
+        filtered = expand(filtered_template, run_id=run_ids, l_freq=EPOCHS_L_FREQ, allow_missing=True),
+        bads = expand(bad_channels_template, run_id=run_ids, allow_missing=True),
+        events = expand(events_template, run_id=run_ids, allow_missing=True)
+    output:
+        raw = temp(concatenated_raw_template),
+        events = temp(concatenated_events_template)
+    run:
+        concatenate_runs(filtered_paths=input.filtered, bad_paths=input.bads, events_paths=input.events,
+                         concatenated_raw_path=output.raw, concatenated_events_path=output.events)
+
+
+def make_epochs(raw_path, events_path, l_freq, epoched_path):
+    raw = mne.io.read_raw(raw_path)
+    events = mne.read_events(events_path)
+
     # `exclude` is empty so that the bad channels are not excluded
     picks = mne.pick_types(raw.info, meg=True, eeg=True, stim=True, eog=True, exclude=[])
 
@@ -242,17 +274,11 @@ def make_epochs(filtered_paths, bad_paths, events_paths, l_freq, epoched_path):
     epochs.save(epoched_path)
 
 
-# Epoching is done on the non-highpassed data
-EPOCHS_L_FREQ = None
-
-
 rule make_epochs:
     input:
-        filtered = expand(filtered_template, run_id=run_ids, l_freq=EPOCHS_L_FREQ, allow_missing=True),
-        bads = expand(bad_channels_template, run_id=run_ids, allow_missing=True),
-        events = expand(events_template, run_id=run_ids, allow_missing=True)
+        raw = concatenated_raw_template,
+        events = concatenated_events_template
     output:
         epoched = epoched_template
     run:
-        make_epochs(filtered_paths=input.filtered, bad_paths=input.bads, events_paths=input.events,
-                    l_freq=EPOCHS_L_FREQ, epoched_path=output.epoched)
+        make_epochs(raw_path=input.raw, events_path=input.events, l_freq=EPOCHS_L_FREQ, epoched_path=output.epoched)

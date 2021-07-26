@@ -9,3 +9,4 @@ dependencies:
   # Otherwise, snakemake throws an error (see https://git.io/JRckv)
   - conda-forge::smart_open=3
   - conda-forge::mne=0.23.0
+  - conda-forge::autoreject

@@ -7,3 +7,4 @@ dependencies:
   - python=3.9.4
   - bioconda::snakemake-minimal=6.2.1
   - conda-forge::mne=0.23.0
+  - conda-forge::autoreject

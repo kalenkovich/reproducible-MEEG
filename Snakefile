@@ -58,6 +58,10 @@ concatenated_events_template = (preprocessing_dir / 'sub-{subject_number}' / 'se
                                 'sub-{subject_number}_ses-meg_task-facerecognition_proc-sss_eventsConcatenated.fif')
 epoched_template = (preprocessing_dir / 'sub-{subject_number}' / 'ses-meg' / 'meg' /
                          'sub-{subject_number}_ses-meg_task-facerecognition_epo.fif')
+ecg_epochs_template = (preprocessing_dir / 'sub-{subject_number}' / 'ses-meg' / 'meg' /
+                       'sub-{subject_number}_ses-meg_task-facerecognition_ecgEpochs.fif')
+eog_epochs_template = (preprocessing_dir / 'sub-{subject_number}' / 'ses-meg' / 'meg' /
+                       'sub-{subject_number}_ses-meg_task-facerecognition_eogEpochs.fif')
 
 # Other file-related variables
 openneuro_url_prefix = 'https://openneuro.org/crn/datasets/ds000117/snapshots/1.0.4/files/'
@@ -93,7 +97,9 @@ rule all:
         filtered = expand(filtered_template, subject_number=subject_numbers, run_id=run_ids, l_freq=L_FREQS),
         icas = expand(ica_template, subject_number=subject_numbers),
         bad_channels = expand(bad_channels_template, subject_number=subject_numbers, run_id=run_ids),
-        epoched = expand(epoched_template, subject_number=subject_numbers)
+        epoched = expand(epoched_template, subject_number=subject_numbers),
+        ecg_epochs = expand(ecg_epochs_template, subject_number=subject_numbers),
+        eog_epochs= expand(eog_epochs_template, subject_number=subject_numbers)
 
 
 def calculate_ica(run_paths, output_path):
@@ -282,3 +288,20 @@ rule make_epochs:
         epoched = epoched_template
     run:
         make_epochs(raw_path=input.raw, events_path=input.events, l_freq=EPOCHS_L_FREQ, epoched_path=output.epoched)
+
+
+rule make_artifact_epochs:
+    input:
+        concatenated_raw = concatenated_raw_template
+    output:
+        ecg = ecg_epochs_template,
+        eog = eog_epochs_template
+    run:
+        raw = mne.io.read_raw(input.concatenated_raw)
+
+        ecg_epochs = create_ecg_epochs(raw, tmin=-.3, tmax=.3,preload=False)
+        ecg_epochs.save(output.ecg)
+
+        eog_epochs = create_eog_epochs(raw, tmin=-.5, tmax=.5,preload=False)
+        eog_epochs.save(output.eog)
+

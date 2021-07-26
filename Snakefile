@@ -61,7 +61,7 @@ ecg_epochs_template = (preprocessing_dir / 'sub-{subject_number}' / 'ses-meg' / 
 eog_epochs_template = (preprocessing_dir / 'sub-{subject_number}' / 'ses-meg' / 'meg' /
                        'sub-{subject_number}_ses-meg_task-facerecognition_eogEpochs.fif')
 artifact_components_template = (preprocessing_dir / 'sub-{subject_number}' / 'ses-meg' / 'meg' /
-                       'sub-{subject_number}_ses-meg_task-facerecognition_artifactComponents.npy')
+                       'sub-{subject_number}_ses-meg_task-facerecognition_artifactComponents.npz')
 
 # Other file-related variables
 openneuro_url_prefix = 'https://openneuro.org/crn/datasets/ds000117/snapshots/1.0.4/files/'

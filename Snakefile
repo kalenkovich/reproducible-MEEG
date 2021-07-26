@@ -64,6 +64,8 @@ eog_epochs_template = (preprocessing_dir / 'sub-{subject_number}' / 'ses-meg' / 
                        'sub-{subject_number}_ses-meg_task-facerecognition_eogEpochs.fif')
 artifact_components_template = (preprocessing_dir / 'sub-{subject_number}' / 'ses-meg' / 'meg' /
                        'sub-{subject_number}_ses-meg_task-facerecognition_artifactComponents.npz')
+epochs_cleaned_template = (preprocessing_dir / 'sub-{subject_number}' / 'ses-meg' / 'meg' /
+                           'sub-{subject_number}_ses-meg_task-facerecognition_epoCleaned.fif')
 
 # Other file-related variables
 openneuro_url_prefix = 'https://openneuro.org/crn/datasets/ds000117/snapshots/1.0.4/files/'
@@ -103,6 +105,7 @@ rule all:
         ecg_epochs = expand(ecg_epochs_template, subject_number=subject_numbers),
         eog_epochs = expand(eog_epochs_template, subject_number=subject_numbers),
         artifact_components = expand(artifact_components_template, subject_number=subject_numbers),
+        clean_epochs = expand(epochs_cleaned_template, subject_number=subject_numbers),
 
 
 def calculate_ica(run_paths, output_path):
@@ -341,3 +344,19 @@ rule select_artifact_components:
     run:
         select_artifact_components(ica_path=input.ica, ecg_epochs_path=input.ecg_epochs,
             eog_epochs_path=input.eog_epochs, artifact_components_path=output.artifact_components)
+
+
+def clean_epochs(ica_path, artifact_components_path, epochs_path, epochs_cleaned_path):
+    pass
+
+
+rule clean_epochs:
+    input:
+        ica = ica_template,
+        artifact_components = artifact_components_template,
+        epochs = epoched_template
+    output:
+        clean_epochs = epochs_cleaned_template
+    run:
+        clean_epochs(ica_path=input.ica, artifact_components_path=input.artifact_components,
+                     epochs_path=input.epochs, epochs_cleaned_path=output.clean_epochs)

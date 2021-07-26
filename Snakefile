@@ -6,7 +6,7 @@ from zipfile import ZipFile, Path as ZipPath
 import pandas as pd
 import requests
 from urllib.parse import urljoin
-
+import numpy as np
 import mne
 
 
@@ -60,6 +60,8 @@ ecg_epochs_template = (preprocessing_dir / 'sub-{subject_number}' / 'ses-meg' / 
                        'sub-{subject_number}_ses-meg_task-facerecognition_ecgEpochs.fif')
 eog_epochs_template = (preprocessing_dir / 'sub-{subject_number}' / 'ses-meg' / 'meg' /
                        'sub-{subject_number}_ses-meg_task-facerecognition_eogEpochs.fif')
+artifact_components_template = (preprocessing_dir / 'sub-{subject_number}' / 'ses-meg' / 'meg' /
+                       'sub-{subject_number}_ses-meg_task-facerecognition_artifactComponents.npy')
 
 # Other file-related variables
 openneuro_url_prefix = 'https://openneuro.org/crn/datasets/ds000117/snapshots/1.0.4/files/'
@@ -97,7 +99,8 @@ rule all:
         bad_channels = expand(bad_channels_template, subject_number=subject_numbers, run_id=run_ids),
         epoched = expand(epoched_template, subject_number=subject_numbers),
         ecg_epochs = expand(ecg_epochs_template, subject_number=subject_numbers),
-        eog_epochs= expand(eog_epochs_template, subject_number=subject_numbers)
+        eog_epochs = expand(eog_epochs_template, subject_number=subject_numbers),
+        artifact_components = expand(artifact_components_template, subject_number=subject_numbers),
 
 
 def calculate_ica(run_paths, output_path):
@@ -303,3 +306,36 @@ rule make_artifact_epochs:
         eog_epochs = create_eog_epochs(raw, tmin=-.5, tmax=.5,preload=False)
         eog_epochs.save(output.eog)
 
+
+def select_artifact_components(ica_path, ecg_epochs_path, eog_epochs_path, artifact_components_path):
+    ica = mne.preprocessing.read_ica(ica_path)
+
+    # ECG
+    ecg_epochs = mne.read_epochs(ecg_epochs_path)
+    ecg_epochs.decimate(5)
+    ecg_epochs.load_data()
+    ecg_epochs.apply_baseline((None, None))
+    ecg_inds, scores_ecg = ica.find_bads_ecg(ecg_epochs, method='ctps', threshold=0.8)
+
+    # EOG
+    eog_epochs = mne.read_epochs(eog_epochs_path)
+    eog_epochs.decimate(5)
+    eog_epochs.load_data()
+    eog_epochs.apply_baseline((None, None))
+    eog_inds, scores_eog = ica.find_bads_eog(eog_epochs)
+
+    # save
+    np.savez(artifact_components_path, ecg_inds=ecg_inds, scores_ecg=scores_ecg, eog_inds=eog_inds,
+             scores_eog=scores_eog)
+
+
+rule select_artifact_components:
+    input:
+        ica = ica_template,
+        ecg_epochs = ecg_epochs_template,
+        eog_epochs = eog_epochs_template
+    output:
+        artifact_components = artifact_components_template
+    run:
+        select_artifact_components(ica_path=input.ica, ecg_epochs_path=input.ecg_epochs,
+            eog_epochs_path=input.eog_epochs, artifact_components_path=output.artifact_components)

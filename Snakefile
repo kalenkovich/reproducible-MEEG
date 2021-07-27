@@ -38,6 +38,8 @@ downloads_dir = data_dir / 'downloads'
 bids_dir = data_dir / 'bids'
 derivatives_dir = bids_dir / 'derivatives'
 preprocessing_dir = derivatives_dir / '01_preprocessing'
+# TODO: rename both the variable and the directory later
+processing_dir = derivatives_dir / '02_processing'
 
 openneuro_maxfiltered_dir = derivatives_dir / 'meg_derivatives'
 
@@ -68,6 +70,8 @@ artifact_components_template = (preprocessing_dir / 'sub-{subject_number}' / 'se
                        'sub-{subject_number}_ses-meg_task-facerecognition_artifactComponents.npz')
 epochs_cleaned_template = (preprocessing_dir / 'sub-{subject_number}' / 'ses-meg' / 'meg' /
                            'sub-{subject_number}_ses-meg_task-facerecognition_epoCleaned.fif')
+evoked_template = (processing_dir / 'sub-{subject_number}' / 'ses-meg' / 'meg' /
+                   'sub-{subject_number}_ses-meg_task-facerecognition_evo.fif')
 
 # Other file-related variables
 openneuro_url_prefix = 'https://openneuro.org/crn/datasets/ds000117/snapshots/1.0.4/files/'
@@ -108,6 +112,7 @@ rule all:
         eog_epochs = expand(eog_epochs_template, subject_number=subject_numbers),
         artifact_components = expand(artifact_components_template, subject_number=subject_numbers),
         clean_epochs = expand(epochs_cleaned_template, subject_number=subject_numbers),
+        evoked = expand(evoked_template, subject_number=subject_numbers),
 
 
 def calculate_ica(run_paths, output_path):
@@ -383,3 +388,16 @@ rule clean_epochs:
     run:
         clean_epochs(ica_path=input.ica, artifact_components_path=input.artifact_components,
                      epochs_path=input.epochs, epochs_cleaned_path=output.clean_epochs)
+
+
+def make_evoked(clean_epochs_path, evoked_path):
+    pass
+
+
+rule make_evoked:
+    input:
+        clean_epochs = epochs_cleaned_template
+    output:
+        evoked = evoked_template
+    run:
+        make_evoked(clean_epochs_path=input.clean_epochs, evoked_path=output.evoked)

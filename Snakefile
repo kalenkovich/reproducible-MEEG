@@ -9,6 +9,7 @@ import mne
 
 
 # Helper functions
+from autoreject import get_rejection_threshold
 from mne.preprocessing import create_ecg_epochs, create_eog_epochs
 
 
@@ -29,6 +30,7 @@ L_FREQS = (None, 1)
 # than we would otherwise do for non-Maxwell-filtered raw data (0.98)
 ICA_N_COMPONENTS = 0.999
 RANDOM_STATE = 42
+REJECT_TMAX = 0.8  # duration we really care about
 
 # Folders
 data_dir = Path(os.environ['reproduction-data'])
@@ -347,7 +349,28 @@ rule select_artifact_components:
 
 
 def clean_epochs(ica_path, artifact_components_path, epochs_path, epochs_cleaned_path):
-    pass
+    # Load ica and bad components
+    ica = mne.preprocessing.read_ica(ica_path)
+    artifact_components = np.load(artifact_components_path)
+    ecg_inds, eog_inds = artifact_components['ecg_inds'], artifact_components['eog_inds']
+
+    # Set components to exclude
+    n_max_ecg = 3  # use max 3 ECG components
+    n_max_eog = 3  # use max 2 (sic) EOG components
+    ica.exclude = list(ecg_inds[:n_max_ecg]) + list(eog_inds[:n_max_eog])
+
+    # Remove artifact ICA components
+    epochs = mne.read_epochs(epochs_path)
+    epochs.load_data()
+    ica.apply(epochs)
+
+    # Use autoreject to remove bad epochs
+    reject = get_rejection_threshold(epochs.copy().crop(None, REJECT_TMAX),
+                                     random_state=RANDOM_STATE)
+    epochs.drop_bad(reject=reject)
+
+    # Save
+    epochs.save(epochs_cleaned_path)
 
 
 rule clean_epochs:

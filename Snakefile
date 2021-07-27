@@ -11,6 +11,7 @@ import mne
 # Helper functions
 from autoreject import get_rejection_threshold
 from mne.preprocessing import create_ecg_epochs, create_eog_epochs
+from sklearn.model_selection import KFold
 
 
 def download_file_from_url(url, save_to):
@@ -72,6 +73,8 @@ epochs_cleaned_template = (preprocessing_dir / 'sub-{subject_number}' / 'ses-meg
                            'sub-{subject_number}_ses-meg_task-facerecognition_epoCleaned.fif')
 evoked_template = (processing_dir / 'sub-{subject_number}' / 'ses-meg' / 'meg' /
                    'sub-{subject_number}_ses-meg_task-facerecognition_evo.fif')
+covariance_template = (processing_dir / 'sub-{subject_number}' / 'ses-meg' / 'meg' /
+                       'sub-{subject_number}_ses-meg_task-facerecognition_cov.fif')
 
 # Other file-related variables
 openneuro_url_prefix = 'https://openneuro.org/crn/datasets/ds000117/snapshots/1.0.4/files/'
@@ -113,6 +116,7 @@ rule all:
         artifact_components = expand(artifact_components_template, subject_number=subject_numbers),
         clean_epochs = expand(epochs_cleaned_template, subject_number=subject_numbers),
         evoked = expand(evoked_template, subject_number=subject_numbers),
+        prestimulus_covariance = expand(covariance_template, subject_number=subject_numbers),
 
 
 def calculate_ica(run_paths, output_path):
@@ -433,3 +437,15 @@ rule make_evoked:
         evoked = evoked_template
     run:
         make_evoked(clean_epochs_path=input.clean_epochs, evoked_path=output.evoked)
+
+
+rule calculate_prestimulus_covariance:
+    input:
+        clean_epochs = epochs_cleaned_template
+    output:
+        covariance = covariance_template
+    run:
+        epochs = mne.read_epochs(input.clean_epochs, preload=True)
+        cv = KFold(3, random_state=RANDOM_STATE)  # make sure cv is deterministic
+        cov = mne.compute_covariance(epochs, tmax=0, method='shrunk', cv=cv)
+        cov.save(output.covariance)

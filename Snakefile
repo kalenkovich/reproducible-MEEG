@@ -391,7 +391,39 @@ rule clean_epochs:
 
 
 def make_evoked(clean_epochs_path, evoked_path):
-    pass
+    epochs = mne.read_epochs(clean_epochs_path, preload=True)
+
+    # Evoked
+    evoked_famous = epochs['face/famous'].average()
+    evoked_famous.comment = 'famous'
+
+    evoked_scrambled = epochs['scrambled'].average()
+    evoked_scrambled.comment = 'scrambled'
+
+    evoked_unfamiliar = epochs['face/unfamiliar'].average()
+    evoked_unfamiliar.comment = 'unfamiliar'
+
+    # Faces vs. scrambled
+    contrast = mne.combine_evoked([evoked_famous, evoked_unfamiliar, evoked_scrambled],
+                                   weights=[0.5, 0.5, -1.])
+    contrast.comment = 'contrast'
+
+    # All faces
+    faces = mne.combine_evoked([evoked_famous, evoked_unfamiliar], 'nave')
+    faces.comment = 'faces'
+
+    # let's make trial-count-normalized ones for group statistics
+    epochs_eq = epochs.copy().equalize_event_counts(['face', 'scrambled'])[0]
+    evoked_faces_eq = epochs_eq['face'].average()
+    evoked_scrambled_eq = epochs_eq['scrambled'].average()
+    assert evoked_faces_eq.nave == evoked_scrambled_eq.nave
+    evoked_faces_eq.comment = 'faces_eq'
+    evoked_scrambled_eq.comment = 'scrambled_eq'
+
+    # Save all to one file
+    mne.evoked.write_evokeds(evoked_path, [evoked_famous, evoked_scrambled,
+                                           evoked_unfamiliar, contrast, faces,
+                                           evoked_faces_eq, evoked_scrambled_eq])
 
 
 rule make_evoked:

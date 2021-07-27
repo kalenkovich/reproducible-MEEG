@@ -7,4 +7,6 @@ dependencies:
   - python=3.9.4
   - bioconda::snakemake-minimal=6.2.1
   - conda-forge::mne=0.23.0
-  - conda-forge::autoreject
+  - conda-forge::autoreject=0.2.2
+  # Only necessary because of a bug in autoreject 0.2.2 (see https://git.io/J46B9)
+  - scikit-learn=0.23

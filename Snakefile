@@ -73,6 +73,8 @@ evoked_template = (processing_dir / 'sub-{subject_number}' / 'ses-meg' / 'meg' /
                    'sub-{subject_number}_ses-meg_task-facerecognition_evo.fif')
 covariance_template = (processing_dir / 'sub-{subject_number}' / 'ses-meg' / 'meg' /
                        'sub-{subject_number}_ses-meg_task-facerecognition_cov.fif')
+tfr_template = (processing_dir / 'sub-{subject_number}' / 'ses-meg' / 'meg' /
+                'sub-{subject_number}_ses-meg_task-facerecognition_{measure}-{condition}.fif')
 
 # Other file-related variables
 openneuro_url_prefix = 'https://openneuro.org/crn/datasets/ds000117/snapshots/1.0.4/files/'
@@ -115,6 +117,8 @@ rule all:
         clean_epochs = expand(epochs_cleaned_template, subject_number=subject_numbers),
         evoked = expand(evoked_template, subject_number=subject_numbers),
         prestimulus_covariance = expand(covariance_template, subject_number=subject_numbers),
+        tfr = expand(tfr_template, subject_number=subject_numbers, measure=('itc', 'power'),
+                     condition=('face', 'scrambled')),
 
 
 def calculate_ica(run_paths, output_path):
@@ -447,3 +451,23 @@ rule calculate_prestimulus_covariance:
         cv = KFold(3, random_state=RANDOM_STATE)  # make sure cv is deterministic
         cov = mne.compute_covariance(epochs, tmax=0, method='shrunk', cv=cv)
         cov.save(output.covariance)
+
+
+rule calculate_tfr:
+    input:
+        clean_epochs = epochs_cleaned_template
+    output:
+        **{measure: expand(tfr_template, measure=(measure,), allow_missing=True)[0]
+           for measure in ('power', 'itc')}
+    run:
+        condition = wildcards.condition  # faces/scrambled
+        epochs_subset = mne.read_epochs(input.clean_epochs)[wildcards.condition]
+
+        freqs = np.arange(6,40)
+        n_cycles = freqs / 2.
+        idx = [epochs_subset.ch_names.index('EEG065')]
+        power, itc = mne.time_frequency.tfr_morlet(epochs_subset, freqs=freqs, return_itc=True, n_cycles=n_cycles,
+                                                   picks=idx)
+
+        power.save(output.power)
+        itc.save(output.itc)

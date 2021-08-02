@@ -8,12 +8,17 @@ import requests
 from urllib.parse import urljoin
 import numpy as np
 import mne
+from mne.decoding import SlidingEstimator, cross_val_multiscore
+from autoreject import get_rejection_threshold
+from mne.preprocessing import create_ecg_epochs, create_eog_epochs
+from sklearn.preprocessing import StandardScaler
+from sklearn.model_selection import KFold, StratifiedKFold
+from sklearn.pipeline import make_pipeline
+from sklearn.linear_model import LogisticRegression
+from scipy.io import savemat
 
 
 # Helper functions
-from autoreject import get_rejection_threshold
-from mne.preprocessing import create_ecg_epochs, create_eog_epochs
-from sklearn.model_selection import KFold
 
 
 def download_file_from_url(url, save_to):
@@ -75,6 +80,8 @@ covariance_template = (processing_dir / 'sub-{subject_number}' / 'ses-meg' / 'me
                        'sub-{subject_number}_ses-meg_task-facerecognition_cov.fif')
 tfr_template = (processing_dir / 'sub-{subject_number}' / 'ses-meg' / 'meg' /
                 'sub-{subject_number}_ses-meg_task-facerecognition_{measure}-{condition}.fif')
+decoding_template = (processing_dir / 'sub-{subject_number}' / 'ses-meg' / 'meg' /
+                     'sub-{subject_number}_ses-meg_task-facerecognition_decoded-{conditions}.mat')
 
 # Other file-related variables
 openneuro_url_prefix = 'https://openneuro.org/crn/datasets/ds000117/snapshots/1.0.4/files/'
@@ -100,6 +107,11 @@ EVENTS_ID = {
 TMIN = -0.2
 TMAX = 2.9  # min duration between onsets: (400 fix + 800 stim + 1700 ISI) ms
 REJECT_TMAX = 0.8  # duration we really care about
+# The keys are used in the filenames, the values - to subset epochs
+DECODING_CONDITIONS = {
+    'faces-vs-scrambled': ('face', 'scrambled'),
+    'famousFaces-vs-unfamiliarFaces': ('face/famous', 'face/unfamiliar')
+}
 
 
 # Rules and functions that execute them
@@ -119,6 +131,8 @@ rule all:
         prestimulus_covariance = expand(covariance_template, subject_number=subject_numbers),
         tfr = expand(tfr_template, subject_number=subject_numbers, measure=('itc', 'power'),
                      condition=('face', 'scrambled')),
+        decoded = expand(decoding_template, subject_number=subject_numbers, measure=('itc', 'power'),
+                         conditions=DECODING_CONDITIONS),
 
 
 def calculate_ica(run_paths, output_path):
@@ -471,3 +485,47 @@ rule calculate_tfr:
 
         power.save(output.power)
         itc.save(output.itc)
+
+
+def run_time_decoding(epochs_path, condition1, condition2, n_jobs, output_path):
+
+    epochs = mne.read_epochs(epochs_path)
+
+    # We define the epochs and the labels
+    epochs = mne.concatenate_epochs([epochs[condition1],
+                                     epochs[condition2]])
+    epochs.apply_baseline()
+
+    # Let us restrict ourselves to the MEG channels, and also decimate to
+    # make it faster (although we might miss some detail / alias)
+    epochs.pick_types(meg=True).decimate(4, verbose='error')
+
+    # Get the data and labels
+    X = epochs.get_data()
+    n_cond1 = len(epochs[condition1])
+    n_cond2 = len(epochs[condition2])
+    y = np.r_[np.ones(n_cond1), np.zeros(n_cond2)]
+
+    # Use AUC because chance level is same regardless of the class balance
+    se = SlidingEstimator(
+        make_pipeline(StandardScaler(),
+                      LogisticRegression(random_state=RANDOM_STATE)),
+        scoring='roc_auc', n_jobs=n_jobs)
+    # There is a bit of inconsistency here: `shuffle` is set to False by default so `random_state` does not do anything.
+    cv = StratifiedKFold(random_state=RANDOM_STATE)
+    scores = cross_val_multiscore(se, X=X, y=y, cv=cv)
+
+    # let's save the scores now
+    savemat(output_path, {'scores': scores, 'times': epochs.times})
+
+
+rule run_time_decoding:
+    input:
+        clean_epochs = epochs_cleaned_template
+    output:
+        decoded = decoding_template
+    threads: workflow.cores
+    run:
+        condition1, condition2 = DECODING_CONDITIONS[wildcards.conditions]
+        run_time_decoding(epochs_path=input.clean_epochs, condition1=condition2, condition2=condition2,
+            n_jobs=threads, output_path=output.decoded)

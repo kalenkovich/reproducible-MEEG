@@ -75,6 +75,7 @@ covariance_template = (processing_dir / 'sub-{subject_number}' / 'ses-meg' / 'me
                        'sub-{subject_number}_ses-meg_task-facerecognition_cov.fif')
 tfr_template = (processing_dir / 'sub-{subject_number}' / 'ses-meg' / 'meg' /
                 'sub-{subject_number}_ses-meg_task-facerecognition_{measure}-{condition}.fif')
+group_average_evokeds_path = processing_dir / 'ses-meg' / 'meg' / 'ses-meg_task-facerecognition_evo-ave.fif'
 
 # Other file-related variables
 openneuro_url_prefix = 'https://openneuro.org/crn/datasets/ds000117/snapshots/1.0.4/files/'
@@ -119,6 +120,7 @@ rule all:
         prestimulus_covariance = expand(covariance_template, subject_number=subject_numbers),
         tfr = expand(tfr_template, subject_number=subject_numbers, measure=('itc', 'power'),
                      condition=('face', 'scrambled')),
+        group_average_evokeds = group_average_evokeds_path,
 
 
 def calculate_ica(run_paths, output_path):
@@ -471,3 +473,27 @@ rule calculate_tfr:
 
         power.save(output.power)
         itc.save(output.itc)
+
+
+def group_average_evokeds(evoked_paths, group_average_path):
+    # Load evokeds. One element - one subject.
+    all_evokeds = [mne.read_evokeds(evoked_path) for evoked_path in evoked_paths]
+
+    # Check for consistency of categories across subjects
+    assert len({tuple(evoked.comment for evoked in evokeds) for evokeds in all_evokeds}) == 1
+
+    # Combine evokeds from different subjects. One element - one category.
+    combined_evokeds = [mne.combine_evoked(same_category_evokeds, 'equal')
+                        for same_category_evokeds in zip(*all_evokeds)]
+
+    # Save
+    mne.evoked.write_evokeds(group_average_path, combined_evokeds)
+
+
+rule group_average_evokeds:
+    input:
+        evokeds = expand(evoked_template, subject_number=subject_numbers)
+    output:
+        averaged_evokeds = group_average_evokeds_path
+    run:
+        group_average_evokeds(evoked_paths=input.evokeds, group_average_path=output.averaged_evokeds)

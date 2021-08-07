@@ -187,8 +187,9 @@ rule apply_linear_filter:
 dir_separator = re.escape(str(Path('/')))
 file_in_subject_folder = fr'sub-\d+{dir_separator}.*'
 maxfiltered_file = fr'derivatives{dir_separator}meg_derivatives{dir_separator}.*'
+freesurfer_file = fr'derivatives{dir_separator}freesurfer{dir_separator}.*'
 
-openneuro_filepath_regex = fr'({file_in_subject_folder}|{maxfiltered_file})'
+openneuro_filepath_regex = fr'({file_in_subject_folder}|{maxfiltered_file}|{freesurfer_file})'
 
 
 rule download_from_openneuro:

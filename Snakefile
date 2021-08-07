@@ -84,8 +84,7 @@ bids_t1_sidecar_template = (bids_dir / 'sub-{subject_number}' / 'ses-mri' / 'ana
                             'sub-{subject_number}_ses-mri_acq-mprage_T1w.json')
 bids_t1_template = bids_t1_sidecar_template.with_suffix('.nii.gz')
 bids_freesurfer_t1_template = freesurfer_dir / 'sub-{subject_number}' / 'ses-mri' / 'anat' / 'mri' / 'T1.mgz'
-transformation_template = source_modeling_dir / 'sub-{subject_number}-trans.fif'
-transformation_template_new = source_modeling_dir / 'sub-{subject_number}' / 'sub-{subject_number}-trans.fif'
+transformation_template = source_modeling_dir / 'sub-{subject_number}' / 'sub-{subject_number}-trans.fif'
 
 
 wildcard_constraints:
@@ -137,16 +136,7 @@ rule all:
         tfr = expand(tfr_template, subject_number=subject_numbers, measure=('itc', 'power'),
                      condition=('face', 'scrambled')),
         group_average_evokeds = group_average_evokeds_path,
-        transformation = expand(transformation_template_new, subject_number=subject_numbers),
-
-
-rule copy_trans:
-    input:
-        transformation_template
-    output:
-        transformation_template_new
-    shell:
-        "cp {input} {output}"
+        transformation = expand(transformation_template, subject_number=subject_numbers),
 
 
 def calculate_ica(run_paths, output_path):
@@ -533,7 +523,7 @@ rule estimate_transformation_matrix:
         bids_t1_sidecar = bids_t1_sidecar_template,
         bids_freesurfer_t1 = bids_freesurfer_t1_template
     output:
-        trans = temporary(transformation_template)
+        trans = transformation_template
     run:
         trans = estimate_trans(bids_t1_path=input.bids_t1, bids_t1_sidecar_path=input.bids_t1_sidecar,
             bids_freesurfer_t1_path=input.bids_freesurfer_t1, bids_meg_path=input.run01)

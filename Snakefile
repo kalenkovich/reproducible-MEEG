@@ -15,6 +15,8 @@ from autoreject import get_rejection_threshold
 from mne.preprocessing import create_ecg_epochs, create_eog_epochs
 from sklearn.model_selection import KFold
 
+from scripts.estimate_trans import estimate_trans
+
 
 def download_file_from_url(url, save_to):
     response = requests.get(url)
@@ -39,8 +41,10 @@ derivatives_dir = bids_dir / 'derivatives'
 preprocessing_dir = derivatives_dir / '01_preprocessing'
 # TODO: rename both the variable and the directory later
 processing_dir = derivatives_dir / '02_processing'
+source_modeling_dir = derivatives_dir / '03_source_modeling'
 
 openneuro_maxfiltered_dir = derivatives_dir / 'meg_derivatives'
+freesurfer_dir = derivatives_dir / 'freesurfer'
 
 # Templates
 run_template = (openneuro_maxfiltered_dir / 'sub-{subject_number}' / 'ses-meg' / 'meg' /
@@ -76,6 +80,12 @@ covariance_template = (processing_dir / 'sub-{subject_number}' / 'ses-meg' / 'me
 tfr_template = (processing_dir / 'sub-{subject_number}' / 'ses-meg' / 'meg' /
                 'sub-{subject_number}_ses-meg_task-facerecognition_{measure}-{condition}.fif')
 group_average_evokeds_path = processing_dir / 'ses-meg' / 'meg' / 'ses-meg_task-facerecognition_evo-ave.fif'
+bids_t1_sidecar_template = (bids_dir / 'sub-{subject_number}' / 'ses-mri' / 'anat' /
+                            'sub-{subject_number}_ses-mri_acq-mprage_T1w.json')
+bids_t1_template = bids_t1_sidecar_template.with_suffix('.nii.gz')
+bids_freesurfer_t1_template = freesurfer_dir / 'sub-{subject_number}' / 'ses-mri' / 'anat' / 'mri' / 'T1.mgz'
+transformation_template = source_modeling_dir / 'sub-{subject_number}-trans.fif'
+
 
 # Other file-related variables
 openneuro_url_prefix = 'https://openneuro.org/crn/datasets/ds000117/snapshots/1.0.4/files/'
@@ -121,6 +131,7 @@ rule all:
         tfr = expand(tfr_template, subject_number=subject_numbers, measure=('itc', 'power'),
                      condition=('face', 'scrambled')),
         group_average_evokeds = group_average_evokeds_path,
+        transformation = expand(transformation_template, subject_number=subject_numbers),
 
 
 def calculate_ica(run_paths, output_path):
@@ -498,3 +509,17 @@ rule group_average_evokeds:
         averaged_evokeds = group_average_evokeds_path
     run:
         group_average_evokeds(evoked_paths=input.evokeds, group_average_path=output.averaged_evokeds)
+
+
+rule estimate_transformation_matrix:
+    input:
+        run01 = expand(run_template, run_id='01', allow_missing=True)[0],
+        bids_t1 = bids_t1_template,
+        bids_t1_sidecar = bids_t1_sidecar_template,
+        bids_freesurfer_t1 = bids_freesurfer_t1_template
+    output:
+        trans = transformation_template
+    run:
+        trans = estimate_trans(bids_t1_path=input.bids_t1, bids_t1_sidecar_path=input.bids_t1_sidecar,
+            bids_freesurfer_t1_path=input.bids_freesurfer_t1, bids_meg_path=input.run01)
+        trans.save(output.trans)

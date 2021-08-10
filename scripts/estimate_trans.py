@@ -48,12 +48,12 @@ def _get_t1_sidecar_landmarks(bids_t1_sidecar_path):
     return mri_landmarks
 
 
-def _get_mri_landmarks(bids_t1_sidecar_path, bids_t1_path, bids_freesurfer_t1_path):
+def _get_mri_landmarks(bids_t1_sidecar_path, bids_t1_path, freesurfer_t1_path):
 
     # Load t1 images from BIDS and Freesurfer
     bids_nifti = nib.load(str(bids_t1_path))
     bids_mgh = nib.MGHImage(bids_nifti.dataobj, bids_nifti.affine)
-    fs_mgh = nib.load(str(bids_freesurfer_t1_path))
+    fs_mgh = nib.load(str(freesurfer_t1_path))
 
     # Transformation matrices
     bids_vox2ras = bids_mgh.header.get_vox2ras()
@@ -80,7 +80,7 @@ def _get_meg_landmarks(raw_path):
                        meg_coords_dict['RPA']))
 
 
-def estimate_trans(bids_t1_path, bids_t1_sidecar_path, bids_freesurfer_t1_path, bids_meg_path):
+def estimate_trans(bids_t1_path, bids_t1_sidecar_path, freesurfer_t1_path, bids_meg_path):
     """
     Estimates transformation matrix from MEG and freesurfer MRI landmark points.
 
@@ -92,7 +92,7 @@ def estimate_trans(bids_t1_path, bids_t1_sidecar_path, bids_freesurfer_t1_path, 
     mri_landmarks = _get_mri_landmarks(
         bids_t1_sidecar_path=bids_t1_sidecar_path,
         bids_t1_path=bids_t1_path,
-        bids_freesurfer_t1_path=bids_freesurfer_t1_path)
+        freesurfer_t1_path=freesurfer_t1_path)
     meg_landmarks = _get_meg_landmarks(bids_meg_path)
 
     # Given the two sets of points, fit the transform

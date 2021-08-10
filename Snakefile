@@ -1,6 +1,7 @@
 from pathlib import Path
 import os
 import re
+
 import pandas as pd
 import requests
 from urllib.parse import urljoin
@@ -33,6 +34,11 @@ L_FREQS = (None, 1)
 # than we would otherwise do for non-Maxwell-filtered raw data (0.98)
 ICA_N_COMPONENTS = 0.999
 RANDOM_STATE = 42
+REJECT_TMAX = 0.8  # duration we really care about
+# Minimal distance for the forward model
+MINDIST = 5
+# Spacing of the source space used in the forward model
+SOURCE_SPACE_SPACING = 'oct6'
 
 # Mapping openneuro subject codes to the openfmri ones. See section "RELATIONSHIP OF SUBJECT NUMBERING RELATIVE TO OTHER
 # VERSIONS OF DATASET" at https://openneuro.org/datasets/ds000117/versions/1.0.4
@@ -114,6 +120,12 @@ bids_t1_sidecar_template = (bids_dir / 'sub-{subject_number}' / 'ses-mri' / 'ana
 bids_t1_template = bids_t1_sidecar_template.with_suffix('.nii.gz')
 freesurfer_t1_template = freesurfer_dir / 'sub{openfmri_subject_number}' / 'mri' / 'T1.mgz'
 transformation_template = source_modeling_dir / 'sub-{subject_number}' / 'sub-{subject_number}-trans.fif'
+bem_src_template = (freesurfer_dir / 'sub{openfmri_subject_number}' / 'bem' /
+                f'sub{{openfmri_subject_number}}-{SOURCE_SPACE_SPACING}-src.fif')
+bem_sol_template = (freesurfer_dir / 'sub{openfmri_subject_number}' / 'bem' /
+                    'sub{openfmri_subject_number}-5120-bem-sol.fif')
+forward_model_template = (source_modeling_dir / 'sub-{subject_number}' /
+                          f'sub-{{subject_number}}_spacing-{SOURCE_SPACE_SPACING}-fwd.fif')
 
 
 wildcard_constraints:
@@ -167,6 +179,7 @@ rule all:
         group_average_evokeds = group_average_evokeds_path,
         # TODO: run for all subjects once we have run FreeSurfer on all of them
         transformation = expand(transformation_template, subject_number=['01']),
+        forward_model = expand(forward_model_template, subject_number=['01']),
 
 
 def calculate_ica(run_paths, output_path):
@@ -560,6 +573,27 @@ rule estimate_transformation_matrix:
         trans.save(output.trans)
 
 
+def make_forward_model(evoked_path, trans_path, src_path, bem_path, forward_model_path):
+    info = mne.io.read_info(evoked_path)
+    # Because we use a 1-layer BEM, we do MEG only
+    fwd = mne.make_forward_solution(info, trans_path, src_path, bem_path,
+                                    meg=True, eeg=False, mindist=MINDIST)
+    mne.write_forward_solution(forward_model_path, fwd, overwrite=True)
+
+
 def freesurfer_inputs(wildcards):
     openfmri_subject_number = OPENNEURO_TO_OPENFMRI_SUBJECT_NUMBER[wildcards.subject_number]
     return str(freesurfer_t1_template).format(openfmri_subject_number=openfmri_subject_number)
+
+
+rule run_forward:
+    input:
+        evoked = evoked_template,
+        transformation = transformation_template,
+        src = lambda wildcards: openfmri_input(wildcards.subject_number, bem_src_template),
+        bem = lambda wildcards: openfmri_input(wildcards.subject_number, bem_sol_template)
+    output:
+        forward_model = forward_model_template
+    run:
+        make_forward_model(evoked_path=input.evoked, trans_path=input.transformation, src_path=input.src,
+            bem_path=input.bem, forward_model_path=output.forward_model)

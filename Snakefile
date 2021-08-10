@@ -11,7 +11,7 @@ import mne
 
 # Helper functions
 from autoreject import get_rejection_threshold
-from mne.minimum_norm import make_inverse_operator, write_inverse_operator
+from mne.minimum_norm import make_inverse_operator, write_inverse_operator, apply_inverse, read_inverse_operator
 from mne.preprocessing import create_ecg_epochs, create_eog_epochs
 from sklearn.model_selection import KFold
 
@@ -61,6 +61,9 @@ OPENNEURO_TO_OPENFMRI_SUBJECT_NUMBER = {
     '15': '018',
     '16': '019'
 }
+
+
+CONDITIONS = ['scrambled', 'unfamiliar', 'famous', 'faces', 'contrast', 'faces_eq', 'scrambled_eq']
 
 
 def openfmri_input(openneuro_subject_number, openfmri_template):
@@ -129,6 +132,7 @@ forward_model_template = (source_modeling_dir / 'sub-{subject_number}' /
                           f'sub-{{subject_number}}_spacing-{SOURCE_SPACE_SPACING}-fwd.fif')
 inverse_model_template = (source_modeling_dir / 'sub-{subject_number}' /
                           f'sub-{{subject_number}}_spacing-{SOURCE_SPACE_SPACING}-inv.fif')
+stc_template = source_modeling_dir / 'sub-{subject_number}' / 'sub-{subject_number}_condition-{condition}-stc.h5'
 
 
 wildcard_constraints:
@@ -184,6 +188,7 @@ rule all:
         transformation = expand(transformation_template, subject_number=['01']),
         forward_model = expand(forward_model_template, subject_number=['01']),
         inverse_model= expand(inverse_model_template, subject_number=['01']),
+        stc_template = expand(stc_template, subject_number=['01'], condition=CONDITIONS)
 
 
 def calculate_ica(run_paths, output_path):
@@ -620,3 +625,23 @@ rule make_inverse_model:
         info = mne.read_evokeds(input.evoked)[0].info
         inverse_operator = make_inverse_operator(info, forward, cov, loose=0.2, depth=0.8)
         write_inverse_operator(output.inverse_model, inverse_operator)
+
+
+rule apply_inverse_model:
+    input:
+        evoked = evoked_template,
+        inverse_model = inverse_model_template
+    output:
+        stcs = expand(stc_template, condition=CONDITIONS, allow_missing=True)
+    run:
+        # Load
+        evokeds = mne.read_evokeds(input.evoked, condition=CONDITIONS)
+        inverse_operator = read_inverse_operator(input.inverse_model)
+
+        # Apply inverse
+        snr = 3.0
+        lambda2 = 1.0 / snr ** 2
+
+        for evoked, stc_path in zip(evokeds, output.stcs):
+            stc = apply_inverse(evoked, inverse_operator, lambda2, "dSPM", pick_ori='vector')
+            stc.save(stc_path)

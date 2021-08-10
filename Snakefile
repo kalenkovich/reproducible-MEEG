@@ -55,6 +55,13 @@ OPENNEURO_TO_OPENFMRI_SUBJECT_NUMBER = {
     '16': '019'
 }
 
+
+def openfmri_input(openneuro_subject_number, openfmri_template):
+    openfmri_subject_number = OPENNEURO_TO_OPENFMRI_SUBJECT_NUMBER[openneuro_subject_number]
+    return str(openfmri_template).format(openfmri_subject_number=openfmri_subject_number)
+
+
+
 # Folders
 data_dir = Path(os.environ['reproduction-data'])
 downloads_dir = data_dir / 'downloads'
@@ -539,17 +546,12 @@ rule group_average_evokeds:
         group_average_evokeds(evoked_paths=input.evokeds, group_average_path=output.averaged_evokeds)
 
 
-def freesurfer_t1_input(wildcards):
-    openfmri_subject_number = OPENNEURO_TO_OPENFMRI_SUBJECT_NUMBER[wildcards.subject_number]
-    return str(freesurfer_t1_template).format(openfmri_subject_number=openfmri_subject_number)
-
-
 rule estimate_transformation_matrix:
     input:
         run01 = expand(run_template, run_id='01', allow_missing=True)[0],
         bids_t1 = bids_t1_template,
         bids_t1_sidecar = bids_t1_sidecar_template,
-        freesurfer_t1 = freesurfer_t1_input
+        freesurfer_t1 = lambda wildcards: openfmri_input(wildcards.subject_number, freesurfer_t1_template)
     output:
         trans = transformation_template
     run:

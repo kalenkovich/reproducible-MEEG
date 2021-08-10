@@ -558,3 +558,8 @@ rule estimate_transformation_matrix:
         trans = estimate_trans(bids_t1_path=input.bids_t1, bids_t1_sidecar_path=input.bids_t1_sidecar,
             freesurfer_t1_path=input.freesurfer_t1, bids_meg_path=input.run01)
         trans.save(output.trans)
+
+
+def freesurfer_inputs(wildcards):
+    openfmri_subject_number = OPENNEURO_TO_OPENFMRI_SUBJECT_NUMBER[wildcards.subject_number]
+    return str(freesurfer_t1_template).format(openfmri_subject_number=openfmri_subject_number)

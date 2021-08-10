@@ -34,6 +34,27 @@ L_FREQS = (None, 1)
 ICA_N_COMPONENTS = 0.999
 RANDOM_STATE = 42
 
+# Mapping openneuro subject codes to the openfmri ones. See section "RELATIONSHIP OF SUBJECT NUMBERING RELATIVE TO OTHER
+# VERSIONS OF DATASET" at https://openneuro.org/datasets/ds000117/versions/1.0.4
+OPENNEURO_TO_OPENFMRI_SUBJECT_NUMBER = {
+    '01': '002',
+    '02': '003',
+    '03': '004',
+    '04': '011',
+    '05': '006',
+    '06': '007',
+    '07': '008',
+    '08': '009',
+    '09': '010',
+    '10': '012',
+    '11': '013',
+    '12': '014',
+    '13': '015',
+    '14': '017',
+    '15': '018',
+    '16': '019'
+}
+
 # Folders
 data_dir = Path(os.environ['reproduction-data'])
 downloads_dir = data_dir / 'downloads'
@@ -45,7 +66,7 @@ processing_dir = derivatives_dir / '02_processing'
 source_modeling_dir = derivatives_dir / '03_source_modeling'
 
 openneuro_maxfiltered_dir = derivatives_dir / 'meg_derivatives'
-freesurfer_dir = derivatives_dir / 'freesurfer'
+freesurfer_dir = data_dir / 'reconned'
 
 # Templates
 run_template = (openneuro_maxfiltered_dir / 'sub-{subject_number}' / 'ses-meg' / 'meg' /
@@ -84,7 +105,7 @@ group_average_evokeds_path = processing_dir / 'ses-meg' / 'meg' / 'ses-meg_task-
 bids_t1_sidecar_template = (bids_dir / 'sub-{subject_number}' / 'ses-mri' / 'anat' /
                             'sub-{subject_number}_ses-mri_acq-mprage_T1w.json')
 bids_t1_template = bids_t1_sidecar_template.with_suffix('.nii.gz')
-bids_freesurfer_t1_template = freesurfer_dir / 'sub-{subject_number}' / 'ses-mri' / 'anat' / 'mri' / 'T1.mgz'
+freesurfer_t1_template = freesurfer_dir / 'sub{openfmri_subject_number}' / 'mri' / 'T1.mgz'
 transformation_template = source_modeling_dir / 'sub-{subject_number}' / 'sub-{subject_number}-trans.fif'
 
 
@@ -137,7 +158,8 @@ rule all:
         tfr = expand(tfr_template, subject_number=subject_numbers, measure=('itc', 'power'),
                      condition=('face', 'scrambled')),
         group_average_evokeds = group_average_evokeds_path,
-        transformation = expand(transformation_template, subject_number=subject_numbers),
+        # TODO: run for all subjects once we have run FreeSurfer on all of them
+        transformation = expand(transformation_template, subject_number=['01']),
 
 
 def calculate_ica(run_paths, output_path):
@@ -517,15 +539,20 @@ rule group_average_evokeds:
         group_average_evokeds(evoked_paths=input.evokeds, group_average_path=output.averaged_evokeds)
 
 
+def freesurfer_t1_input(wildcards):
+    openfmri_subject_number = OPENNEURO_TO_OPENFMRI_SUBJECT_NUMBER[wildcards.subject_number]
+    return str(freesurfer_t1_template).format(openfmri_subject_number=openfmri_subject_number)
+
+
 rule estimate_transformation_matrix:
     input:
         run01 = expand(run_template, run_id='01', allow_missing=True)[0],
         bids_t1 = bids_t1_template,
         bids_t1_sidecar = bids_t1_sidecar_template,
-        bids_freesurfer_t1 = bids_freesurfer_t1_template
+        freesurfer_t1 = freesurfer_t1_input
     output:
         trans = transformation_template
     run:
         trans = estimate_trans(bids_t1_path=input.bids_t1, bids_t1_sidecar_path=input.bids_t1_sidecar,
-            bids_freesurfer_t1_path=input.bids_freesurfer_t1, bids_meg_path=input.run01)
+            freesurfer_t1_path=input.freesurfer_t1, bids_meg_path=input.run01)
         trans.save(output.trans)

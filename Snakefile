@@ -1,5 +1,6 @@
 from pathlib import Path
 import os
+import re
 from zipfile import ZipFile, Path as ZipPath
 import requests
 from urllib.parse import urljoin
@@ -17,52 +18,6 @@ def download_file_from_url(url, save_to):
         file.write(response.content)
 
 
-def filter_bids_dir(bids_root, subject=None, session=None, data_type=None):
-    """
-    Returns a list of paths to folders/directories in bids_root filtered by subject, session, and/or data_type
-    :param bids_root: Path object (can be zipfile.Path as well as pathlib.Path)
-    :param subject: subject id (e.g., '01') or None
-    :param session: session type ('meg', 'mri') or None
-    :param data_type: data type ('anat', 'beh', etc.) or None
-    :return: list of objects of the same type as bids_root
-    """
-    # The archive structure is "sub-<xx>/ses-<yyy>/<data_type>/...".
-    # "ses-meg" in addition to "meg" and "beh" contains a json file which will be skipped if data_type is set.
-
-    # All subjects if subject is None else a single session folder
-    subject_folders = [bids_root / f'sub-{subject}'] if subject else list(zip_path.iterdir())
-
-    # All sessions if session is None else a single session folder
-    session_folders = [session_folder
-                       for subject_folder in subject_folders
-                       for session_folder in
-                       ([subject_folder / f'ses-{session}'] if session else list(subject_folder.iterdir()))]
-
-    # All folders and files in the session folders if data_type is None else a single data type folder
-    to_unpack = [item
-                 for session_folder in session_folders
-                 for item in ([session_folder / f'{data_type}'] if data_type else list(session_folder.iterdir()))                 ]
-
-    return to_unpack
-
-
-def unzip_bids_archive(archive_path, bids_root, subject=None, session=None, data_type=None):
-    with ZipFile(archive_path,'r') as zip_file:
-        # All the archives contain a single folder in the root called 'ds000117_R1.0.0/' which we will skip.
-        zip_path = ZipPath(zip_file, 'ds000117_R1.0.0/')
-        # Filter the contents by subject, session, and/or data type.
-        to_unpack = filter_bids_dir(zip_path, subject=subject, session=session, data_type=data_type)
-        # Recurse the list of folders/files and copy the files to bids_dir
-        while to_unpack:
-            item = to_unpack.pop()
-            if item.is_file():
-                relative_path = Path(str(item)).relative_to(Path(str(zip_path)))
-                output_path = bids_root / relative_path
-                output_path.parent.mkdir(parents=True, exist_ok=True)
-                output_path.write_bytes(item.read_bytes())
-            else:
-                to_unpack += list(item.iterdir())
-
 # Configuration constants
 L_FREQS = (None, 1)
 
@@ -73,24 +28,18 @@ bids_dir = data_dir / 'bids'
 derivatives_dir = bids_dir / 'derivatives'
 preprocessing_dir = derivatives_dir / '01_preprocessing'
 
+openneuro_maxfiltered_dir = derivatives_dir / 'meg_derivatives'
+
 # Templates
-subject_json_template = (bids_dir / 'sub-{subject_number}' / 'ses-meg' /
-                'sub-{subject_number}_ses-meg_task-facerecognition_proc-tsss_meg.json')
-run_template = (bids_dir / 'sub-{subject_number}' / 'ses-meg' / 'meg' /
-                'sub-{subject_number}_ses-meg_task-facerecognition_run-{run_id}_meg.fif')
-events_template = (preprocessing_dir / 'sub-{subject_number}' / 'ses-meg' / 'meg' /
-                'sub-{subject_number}_ses-meg_task-facerecognition_run-{run_id}_eve.fif')
+run_template = (openneuro_maxfiltered_dir / 'sub-{subject_number}' / 'ses-meg' / 'meg' /
+                'sub-{subject_number}_ses-meg_task-facerecognition_run-{run_id}_proc-sss_meg.fif')
+events_template = (bids_dir / 'sub-{subject_number}' / 'ses-meg' / 'meg' /
+                'sub-{subject_number}_ses-meg_task-facerecognition_run-{run_id}_events.tsv')
 filtered_template = (preprocessing_dir / 'sub-{subject_number}' / 'ses-meg' / 'meg' /
                      'sub-{subject_number}_ses-meg_task-facerecognition_run-{run_id}_filteredHighPass{l_freq}.fif')
 
 # Other file-related variables
-openfmri_url_prefix = 'https://s3.amazonaws.com/openneuro/ds000117/ds000117_R1.0.0/compressed/'
-openfmri_zip_files = [
-    'ds000117_R1.0.0_sub01-04.zip',
-    'ds000117_R1.0.0_sub05-08.zip',
-    'ds000117_R1.0.0_sub09-12.zip',
-    'ds000117_R1.0.0_sub13-16.zip',
-]
+openneuro_url_prefix = 'https://openneuro.org/crn/datasets/ds000117/snapshots/1.0.4/files/'
 
 
 rule all:
@@ -141,47 +90,29 @@ rule apply_linear_filter:
         linear_filter(input.run, output.filtered, l_freq)
 
 
-def extract_events(run_path, events_path):
-    raw = mne.io.read_raw_fif(str(run_path))
-    mask = 4096 + 256  # mask for excluding high order bits
-    events = mne.find_events(raw, stim_channel='STI101',
-                             consecutive='increasing', mask=mask,
-                             mask_type='not_and', min_duration=0.003)
-    mne.write_events(str(events_path), events)
+# We need to distinguish files from openneuro from files that we create here. We need maxfiltered data, so we will
+# download some of the derivatives from openneuro as well. In order for snakemake to understand that it shouldn't try to
+# download # files that are created by our rules, we need to add constraints on the files that *can* be downloaded. For
+# now, these are:
+# - events files in the `sub-**` folders
+# - maxfiltered data in the derivatives/meg_derivatives
 
-rule extract_events:
-    input:
-        run = run_template
+dir_separator = re.escape(str(Path('/')))
+file_in_subject_folder = fr'sub-\d+{dir_separator}.*'
+maxfiltered_file = fr'derivatives{dir_separator}meg_derivatives{dir_separator}.*'
+
+openneuro_filepath_regex = fr'({file_in_subject_folder}|{maxfiltered_file})'
+
+
+rule download_from_openneuro:
     output:
-        events = events_template
+        file_path = bids_dir / '{openneuro_filepath}'
+    wildcard_constraints:
+        openneuro_filepath = openneuro_filepath_regex
     run:
-        extract_events(input.run, output.events)
-
-# Pseudo-rule to connect run files to the json file common to all runs
-rule get_run:
-    input:
-        subject_json_template
-    output:
-        run_template
-
-def find_archive_with_subject(wildcards):
-    k = int(wildcards.subject_number)
-    start = (k - 1) // 4  * 4 + 1
-    end = start + 3
-    return downloads_dir / f'ds000117_R1.0.0_sub{start:02d}-{end:02}.zip'
-
-rule unpack_single_subject_meg_data:
-    input:
-        archive = find_archive_with_subject
-    output:
-        json = subject_json_template
-    run:
-        unzip_bids_archive(archive_path=input.archive, bids_root=bids_dir, subject=wildcards.subject_number,
-                           session='meg')
-
-rule download_single_file_from_openfmri:
-    output:
-        file_path = downloads_dir / '{filename}'
-    run:
-        url = urljoin(openfmri_url_prefix, wildcards.filename)
+        relative_path = Path(output.file_path).relative_to(bids_dir)
+        # The file urls on openneuro look like the paths, just with ':' instead of '/'.
+        # To prevent urljoin from interpreting the part before the first colon as a scheme name, we need to add './'
+        # (see https://stackoverflow.com/q/55202875/)
+        url = urljoin(openneuro_url_prefix, './' + ':'.join(relative_path.parts))
         download_file_from_url(url=url, save_to=output.file_path)

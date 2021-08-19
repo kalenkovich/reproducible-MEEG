@@ -1,7 +1,6 @@
 from pathlib import Path
 import os
 import re
-from zipfile import ZipFile, Path as ZipPath
 import requests
 from urllib.parse import urljoin
 

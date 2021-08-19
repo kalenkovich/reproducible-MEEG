@@ -1,7 +1,6 @@
 from pathlib import Path
 import os
 import re
-from zipfile import ZipFile, Path as ZipPath
 import requests
 from urllib.parse import urljoin
 
@@ -20,6 +19,12 @@ def download_file_from_url(url, save_to):
 
 # Configuration constants
 L_FREQS = (None, 1)
+# [from the original script at scripts/processing/05-run_ica.py]
+# SSS reduces the data rank and the noise levels, so let's include
+# components based on a higher proportion of variance explained (0.999)
+# than we would otherwise do for non-Maxwell-filtered raw data (0.98)
+ICA_N_COMPONENTS = 0.999
+RANDOM_STATE = 42
 
 # Folders
 data_dir = Path(os.environ['reproduction-data'])
@@ -37,21 +42,42 @@ events_template = (bids_dir / 'sub-{subject_number}' / 'ses-meg' / 'meg' /
                 'sub-{subject_number}_ses-meg_task-facerecognition_run-{run_id}_events.tsv')
 filtered_template = (preprocessing_dir / 'sub-{subject_number}' / 'ses-meg' / 'meg' /
                      'sub-{subject_number}_ses-meg_task-facerecognition_run-{run_id}_filteredHighPass{l_freq}.fif')
+ica_template = (preprocessing_dir / 'sub-{subject_number}' / 'ses-meg' / 'meg' /
+                'sub-{subject_number}_ses-meg_task-facerecognition_filtered.fif')
 
 # Other file-related variables
 openneuro_url_prefix = 'https://openneuro.org/crn/datasets/ds000117/snapshots/1.0.4/files/'
 
 
+# Helper variables
+subject_numbers = [f'{i:02d}' for i in range(1,16 + 1)]
+run_ids = [f'{i:02d}' for i in range(1,6 + 1)]
+
+
+# Rules and functions that execute them
+
 rule all:
     input:
-         events=expand(events_template,
-                       subject_number=[f'{i:02d}' for i in range(1, 16 + 1)],
-                       run_id=[f'{i:02d}' for i in range(1, 6 + 1)]),
+        events = expand(events_template, subject_number=subject_numbers, run_id=run_ids),
+        filtered = expand(filtered_template, subject_number=subject_numbers, run_id=run_ids, l_freq=L_FREQS),
+        icas = expand(ica_template, subject_number=subject_numbers)
 
-         filtered=expand(filtered_template,
-                         subject_number=[f'{i:02d}' for i in range(1, 16 + 1)],
-                         run_id=[f'{i:02d}' for i in range(1, 6 + 1)],
-                         l_freq=L_FREQS)
+
+def calculate_ica(run_paths, output_path):
+    raw = mne.concatenate_raws([mne.io.read_raw_fif(run_path) for run_path in run_paths])
+    ica = mne.preprocessing.ICA(method='fastica',random_state=RANDOM_STATE, n_components=ICA_N_COMPONENTS)
+    picks = mne.pick_types(raw.info, meg=True, eeg=False, eog=False, stim=False, exclude='bads')
+    ica.fit(raw, picks=picks, reject=dict(grad=4000e-13, mag=4e-12), decim=11)
+    ica.save(output_path)
+
+
+rule ica:
+    input:
+        runs = expand(filtered_template, run_id=run_ids, l_freq=1, allow_missing=True)
+    output:
+        ica = ica_template
+    run:
+        calculate_ica(input.runs, output.ica)
 
 
 def linear_filter(run_path, output_path, l_freq):

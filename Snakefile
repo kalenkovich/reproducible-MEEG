@@ -20,6 +20,10 @@ def download_file_from_url(url, save_to):
 
 # Configuration constants
 L_FREQS = (None, 1)
+# [from the original script at scripts/processing/05-run_ica.py]
+# SSS reduces the data rank and the noise levels, so let's include
+# components based on a higher proportion of variance explained (0.999)
+# than we would otherwise do for non-Maxwell-filtered raw data (0.98)
 ICA_N_COMPONENTS = 0.999
 RANDOM_STATE = 42
 

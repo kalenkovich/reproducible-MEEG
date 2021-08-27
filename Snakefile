@@ -11,6 +11,7 @@ import mne
 # Helper functions
 from autoreject import get_rejection_threshold
 from mne.preprocessing import create_ecg_epochs, create_eog_epochs
+from sklearn.model_selection import KFold
 
 
 def download_file_from_url(url, save_to):
@@ -30,7 +31,6 @@ L_FREQS = (None, 1)
 # than we would otherwise do for non-Maxwell-filtered raw data (0.98)
 ICA_N_COMPONENTS = 0.999
 RANDOM_STATE = 42
-REJECT_TMAX = 0.8  # duration we really care about
 
 # Folders
 data_dir = Path(os.environ['reproduction-data'])
@@ -38,6 +38,8 @@ downloads_dir = data_dir / 'downloads'
 bids_dir = data_dir / 'bids'
 derivatives_dir = bids_dir / 'derivatives'
 preprocessing_dir = derivatives_dir / '01_preprocessing'
+# TODO: rename both the variable and the directory later
+processing_dir = derivatives_dir / '02_processing'
 
 openneuro_maxfiltered_dir = derivatives_dir / 'meg_derivatives'
 
@@ -68,6 +70,12 @@ artifact_components_template = (preprocessing_dir / 'sub-{subject_number}' / 'se
                        'sub-{subject_number}_ses-meg_task-facerecognition_artifactComponents.npz')
 epochs_cleaned_template = (preprocessing_dir / 'sub-{subject_number}' / 'ses-meg' / 'meg' /
                            'sub-{subject_number}_ses-meg_task-facerecognition_epoCleaned.fif')
+evoked_template = (processing_dir / 'sub-{subject_number}' / 'ses-meg' / 'meg' /
+                   'sub-{subject_number}_ses-meg_task-facerecognition_evo.fif')
+covariance_template = (processing_dir / 'sub-{subject_number}' / 'ses-meg' / 'meg' /
+                       'sub-{subject_number}_ses-meg_task-facerecognition_cov.fif')
+tfr_template = (processing_dir / 'sub-{subject_number}' / 'ses-meg' / 'meg' /
+                'sub-{subject_number}_ses-meg_task-facerecognition_{measure}-{condition}.fif')
 
 # Other file-related variables
 openneuro_url_prefix = 'https://openneuro.org/crn/datasets/ds000117/snapshots/1.0.4/files/'
@@ -108,6 +116,10 @@ rule all:
         eog_epochs = expand(eog_epochs_template, subject_number=subject_numbers),
         artifact_components = expand(artifact_components_template, subject_number=subject_numbers),
         clean_epochs = expand(epochs_cleaned_template, subject_number=subject_numbers),
+        evoked = expand(evoked_template, subject_number=subject_numbers),
+        prestimulus_covariance = expand(covariance_template, subject_number=subject_numbers),
+        tfr = expand(tfr_template, subject_number=subject_numbers, measure=('itc', 'power'),
+                     condition=('face', 'scrambled')),
 
 
 def calculate_ica(run_paths, output_path):
@@ -383,3 +395,80 @@ rule clean_epochs:
     run:
         clean_epochs(ica_path=input.ica, artifact_components_path=input.artifact_components,
                      epochs_path=input.epochs, epochs_cleaned_path=output.clean_epochs)
+
+
+def make_evoked(clean_epochs_path, evoked_path):
+    epochs = mne.read_epochs(clean_epochs_path, preload=True)
+
+    # Evoked
+    evoked_famous = epochs['face/famous'].average()
+    evoked_famous.comment = 'famous'
+
+    evoked_scrambled = epochs['scrambled'].average()
+    evoked_scrambled.comment = 'scrambled'
+
+    evoked_unfamiliar = epochs['face/unfamiliar'].average()
+    evoked_unfamiliar.comment = 'unfamiliar'
+
+    # Faces vs. scrambled
+    contrast = mne.combine_evoked([evoked_famous, evoked_unfamiliar, evoked_scrambled],
+                                   weights=[0.5, 0.5, -1.])
+    contrast.comment = 'contrast'
+
+    # All faces
+    faces = mne.combine_evoked([evoked_famous, evoked_unfamiliar], 'nave')
+    faces.comment = 'faces'
+
+    # let's make trial-count-normalized ones for group statistics
+    epochs_eq = epochs.copy().equalize_event_counts(['face', 'scrambled'])[0]
+    evoked_faces_eq = epochs_eq['face'].average()
+    evoked_scrambled_eq = epochs_eq['scrambled'].average()
+    assert evoked_faces_eq.nave == evoked_scrambled_eq.nave
+    evoked_faces_eq.comment = 'faces_eq'
+    evoked_scrambled_eq.comment = 'scrambled_eq'
+
+    # Save all to one file
+    mne.evoked.write_evokeds(evoked_path, [evoked_famous, evoked_scrambled,
+                                           evoked_unfamiliar, contrast, faces,
+                                           evoked_faces_eq, evoked_scrambled_eq])
+
+
+rule make_evoked:
+    input:
+        clean_epochs = epochs_cleaned_template
+    output:
+        evoked = evoked_template
+    run:
+        make_evoked(clean_epochs_path=input.clean_epochs, evoked_path=output.evoked)
+
+
+rule calculate_prestimulus_covariance:
+    input:
+        clean_epochs = epochs_cleaned_template
+    output:
+        covariance = covariance_template
+    run:
+        epochs = mne.read_epochs(input.clean_epochs, preload=True)
+        cv = KFold(3, random_state=RANDOM_STATE)  # make sure cv is deterministic
+        cov = mne.compute_covariance(epochs, tmax=0, method='shrunk', cv=cv)
+        cov.save(output.covariance)
+
+
+rule calculate_tfr:
+    input:
+        clean_epochs = epochs_cleaned_template
+    output:
+        **{measure: expand(tfr_template, measure=(measure,), allow_missing=True)[0]
+           for measure in ('power', 'itc')}
+    run:
+        condition = wildcards.condition  # faces/scrambled
+        epochs_subset = mne.read_epochs(input.clean_epochs)[wildcards.condition]
+
+        freqs = np.arange(6,40)
+        n_cycles = freqs / 2.
+        idx = [epochs_subset.ch_names.index('EEG065')]
+        power, itc = mne.time_frequency.tfr_morlet(epochs_subset, freqs=freqs, return_itc=True, n_cycles=n_cycles,
+                                                   picks=idx)
+
+        power.save(output.power)
+        itc.save(output.itc)

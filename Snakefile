@@ -31,7 +31,6 @@ L_FREQS = (None, 1)
 # than we would otherwise do for non-Maxwell-filtered raw data (0.98)
 ICA_N_COMPONENTS = 0.999
 RANDOM_STATE = 42
-REJECT_TMAX = 0.8  # duration we really care about
 
 # Folders
 data_dir = Path(os.environ['reproduction-data'])

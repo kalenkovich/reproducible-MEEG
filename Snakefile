@@ -1,6 +1,7 @@
 from pathlib import Path
 import os
 import re
+
 import pandas as pd
 import requests
 from urllib.parse import urljoin
@@ -12,6 +13,8 @@ import mne
 from autoreject import get_rejection_threshold
 from mne.preprocessing import create_ecg_epochs, create_eog_epochs
 from sklearn.model_selection import KFold
+
+from scripts.estimate_trans import estimate_trans
 
 
 def download_file_from_url(url, save_to):
@@ -31,6 +34,39 @@ L_FREQS = (None, 1)
 # than we would otherwise do for non-Maxwell-filtered raw data (0.98)
 ICA_N_COMPONENTS = 0.999
 RANDOM_STATE = 42
+REJECT_TMAX = 0.8  # duration we really care about
+# Minimal distance for the forward model
+MINDIST = 5
+# Spacing of the source space used in the forward model
+SOURCE_SPACE_SPACING = 'oct6'
+
+# Mapping openneuro subject codes to the openfmri ones. See section "RELATIONSHIP OF SUBJECT NUMBERING RELATIVE TO OTHER
+# VERSIONS OF DATASET" at https://openneuro.org/datasets/ds000117/versions/1.0.4
+OPENNEURO_TO_OPENFMRI_SUBJECT_NUMBER = {
+    '01': '002',
+    '02': '003',
+    '03': '004',
+    '04': '011',
+    '05': '006',
+    '06': '007',
+    '07': '008',
+    '08': '009',
+    '09': '010',
+    '10': '012',
+    '11': '013',
+    '12': '014',
+    '13': '015',
+    '14': '017',
+    '15': '018',
+    '16': '019'
+}
+
+
+def openfmri_input(openneuro_subject_number, openfmri_template):
+    openfmri_subject_number = OPENNEURO_TO_OPENFMRI_SUBJECT_NUMBER[openneuro_subject_number]
+    return str(openfmri_template).format(openfmri_subject_number=openfmri_subject_number)
+
+
 
 # Folders
 data_dir = Path(os.environ['reproduction-data'])
@@ -40,8 +76,10 @@ derivatives_dir = bids_dir / 'derivatives'
 preprocessing_dir = derivatives_dir / '01_preprocessing'
 # TODO: rename both the variable and the directory later
 processing_dir = derivatives_dir / '02_processing'
+source_modeling_dir = derivatives_dir / '03_source_modeling'
 
 openneuro_maxfiltered_dir = derivatives_dir / 'meg_derivatives'
+freesurfer_dir = data_dir / 'reconned'
 
 # Templates
 run_template = (openneuro_maxfiltered_dir / 'sub-{subject_number}' / 'ses-meg' / 'meg' /
@@ -77,6 +115,23 @@ covariance_template = (processing_dir / 'sub-{subject_number}' / 'ses-meg' / 'me
 tfr_template = (processing_dir / 'sub-{subject_number}' / 'ses-meg' / 'meg' /
                 'sub-{subject_number}_ses-meg_task-facerecognition_{measure}-{condition}.fif')
 group_average_evokeds_path = processing_dir / 'ses-meg' / 'meg' / 'ses-meg_task-facerecognition_evo-ave.fif'
+bids_t1_sidecar_template = (bids_dir / 'sub-{subject_number}' / 'ses-mri' / 'anat' /
+                            'sub-{subject_number}_ses-mri_acq-mprage_T1w.json')
+bids_t1_template = bids_t1_sidecar_template.with_suffix('.nii.gz')
+freesurfer_t1_template = freesurfer_dir / 'sub{openfmri_subject_number}' / 'mri' / 'T1.mgz'
+transformation_template = source_modeling_dir / 'sub-{subject_number}' / 'sub-{subject_number}-trans.fif'
+bem_src_template = (freesurfer_dir / 'sub{openfmri_subject_number}' / 'bem' /
+                f'sub{{openfmri_subject_number}}-{SOURCE_SPACE_SPACING}-src.fif')
+bem_sol_template = (freesurfer_dir / 'sub{openfmri_subject_number}' / 'bem' /
+                    'sub{openfmri_subject_number}-5120-bem-sol.fif')
+forward_model_template = (source_modeling_dir / 'sub-{subject_number}' /
+                          f'sub-{{subject_number}}_spacing-{SOURCE_SPACE_SPACING}-fwd.fif')
+
+
+wildcard_constraints:
+    subject_number="\d+",
+    run_id="\d+"
+
 
 # Other file-related variables
 openneuro_url_prefix = 'https://openneuro.org/crn/datasets/ds000117/snapshots/1.0.4/files/'
@@ -122,6 +177,9 @@ rule all:
         tfr = expand(tfr_template, subject_number=subject_numbers, measure=('itc', 'power'),
                      condition=('face', 'scrambled')),
         group_average_evokeds = group_average_evokeds_path,
+        # TODO: run for all subjects once we have run FreeSurfer on all of them
+        transformation = expand(transformation_template, subject_number=['01']),
+        forward_model = expand(forward_model_template, subject_number=['01']),
 
 
 def calculate_ica(run_paths, output_path):
@@ -187,8 +245,9 @@ rule apply_linear_filter:
 dir_separator = re.escape(str(Path('/')))
 file_in_subject_folder = fr'sub-\d+{dir_separator}.*'
 maxfiltered_file = fr'derivatives{dir_separator}meg_derivatives{dir_separator}.*'
+freesurfer_file = fr'derivatives{dir_separator}freesurfer{dir_separator}.*'
 
-openneuro_filepath_regex = fr'({file_in_subject_folder}|{maxfiltered_file})'
+openneuro_filepath_regex = fr'({file_in_subject_folder}|{maxfiltered_file}|{freesurfer_file})'
 
 
 rule download_from_openneuro:
@@ -498,3 +557,43 @@ rule group_average_evokeds:
         averaged_evokeds = group_average_evokeds_path
     run:
         group_average_evokeds(evoked_paths=input.evokeds, group_average_path=output.averaged_evokeds)
+
+
+rule estimate_transformation_matrix:
+    input:
+        run01 = expand(run_template, run_id='01', allow_missing=True)[0],
+        bids_t1 = bids_t1_template,
+        bids_t1_sidecar = bids_t1_sidecar_template,
+        freesurfer_t1 = lambda wildcards: openfmri_input(wildcards.subject_number, freesurfer_t1_template)
+    output:
+        trans = transformation_template
+    run:
+        trans = estimate_trans(bids_t1_path=input.bids_t1, bids_t1_sidecar_path=input.bids_t1_sidecar,
+            freesurfer_t1_path=input.freesurfer_t1, bids_meg_path=input.run01)
+        trans.save(output.trans)
+
+
+def make_forward_model(evoked_path, trans_path, src_path, bem_path, forward_model_path):
+    info = mne.io.read_info(evoked_path)
+    # Because we use a 1-layer BEM, we do MEG only
+    fwd = mne.make_forward_solution(info, trans_path, src_path, bem_path,
+                                    meg=True, eeg=False, mindist=MINDIST)
+    mne.write_forward_solution(forward_model_path, fwd, overwrite=True)
+
+
+def freesurfer_inputs(wildcards):
+    openfmri_subject_number = OPENNEURO_TO_OPENFMRI_SUBJECT_NUMBER[wildcards.subject_number]
+    return str(freesurfer_t1_template).format(openfmri_subject_number=openfmri_subject_number)
+
+
+rule run_forward:
+    input:
+        evoked = evoked_template,
+        transformation = transformation_template,
+        src = lambda wildcards: openfmri_input(wildcards.subject_number, bem_src_template),
+        bem = lambda wildcards: openfmri_input(wildcards.subject_number, bem_sol_template)
+    output:
+        forward_model = forward_model_template
+    run:
+        make_forward_model(evoked_path=input.evoked, trans_path=input.transformation, src_path=input.src,
+            bem_path=input.bem, forward_model_path=output.forward_model)

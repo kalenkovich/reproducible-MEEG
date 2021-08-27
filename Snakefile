@@ -4,11 +4,12 @@ import re
 import pandas as pd
 import requests
 from urllib.parse import urljoin
-
+import numpy as np
 import mne
 
 
 # Helper functions
+from autoreject import get_rejection_threshold
 from mne.preprocessing import create_ecg_epochs, create_eog_epochs
 
 
@@ -29,6 +30,7 @@ L_FREQS = (None, 1)
 # than we would otherwise do for non-Maxwell-filtered raw data (0.98)
 ICA_N_COMPONENTS = 0.999
 RANDOM_STATE = 42
+REJECT_TMAX = 0.8  # duration we really care about
 
 # Folders
 data_dir = Path(os.environ['reproduction-data'])
@@ -58,6 +60,14 @@ concatenated_events_template = (preprocessing_dir / 'sub-{subject_number}' / 'se
                                 'sub-{subject_number}_ses-meg_task-facerecognition_proc-sss_eventsConcatenated.fif')
 epoched_template = (preprocessing_dir / 'sub-{subject_number}' / 'ses-meg' / 'meg' /
                          'sub-{subject_number}_ses-meg_task-facerecognition_epo.fif')
+ecg_epochs_template = (preprocessing_dir / 'sub-{subject_number}' / 'ses-meg' / 'meg' /
+                       'sub-{subject_number}_ses-meg_task-facerecognition_ecgEpochs.fif')
+eog_epochs_template = (preprocessing_dir / 'sub-{subject_number}' / 'ses-meg' / 'meg' /
+                       'sub-{subject_number}_ses-meg_task-facerecognition_eogEpochs.fif')
+artifact_components_template = (preprocessing_dir / 'sub-{subject_number}' / 'ses-meg' / 'meg' /
+                       'sub-{subject_number}_ses-meg_task-facerecognition_artifactComponents.npz')
+epochs_cleaned_template = (preprocessing_dir / 'sub-{subject_number}' / 'ses-meg' / 'meg' /
+                           'sub-{subject_number}_ses-meg_task-facerecognition_epoCleaned.fif')
 
 # Other file-related variables
 openneuro_url_prefix = 'https://openneuro.org/crn/datasets/ds000117/snapshots/1.0.4/files/'
@@ -93,7 +103,11 @@ rule all:
         filtered = expand(filtered_template, subject_number=subject_numbers, run_id=run_ids, l_freq=L_FREQS),
         icas = expand(ica_template, subject_number=subject_numbers),
         bad_channels = expand(bad_channels_template, subject_number=subject_numbers, run_id=run_ids),
-        epoched = expand(epoched_template, subject_number=subject_numbers)
+        epoched = expand(epoched_template, subject_number=subject_numbers),
+        ecg_epochs = expand(ecg_epochs_template, subject_number=subject_numbers),
+        eog_epochs = expand(eog_epochs_template, subject_number=subject_numbers),
+        artifact_components = expand(artifact_components_template, subject_number=subject_numbers),
+        clean_epochs = expand(epochs_cleaned_template, subject_number=subject_numbers),
 
 
 def calculate_ica(run_paths, output_path):
@@ -282,3 +296,90 @@ rule make_epochs:
         epoched = epoched_template
     run:
         make_epochs(raw_path=input.raw, events_path=input.events, l_freq=EPOCHS_L_FREQ, epoched_path=output.epoched)
+
+
+rule make_artifact_epochs:
+    input:
+        concatenated_raw = concatenated_raw_template
+    output:
+        ecg = ecg_epochs_template,
+        eog = eog_epochs_template
+    run:
+        raw = mne.io.read_raw(input.concatenated_raw)
+
+        ecg_epochs = create_ecg_epochs(raw, tmin=-.3, tmax=.3,preload=False)
+        ecg_epochs.save(output.ecg)
+
+        eog_epochs = create_eog_epochs(raw, tmin=-.5, tmax=.5,preload=False)
+        eog_epochs.save(output.eog)
+
+
+def select_artifact_components(ica_path, ecg_epochs_path, eog_epochs_path, artifact_components_path):
+    ica = mne.preprocessing.read_ica(ica_path)
+
+    # ECG
+    ecg_epochs = mne.read_epochs(ecg_epochs_path)
+    ecg_epochs.decimate(5)
+    ecg_epochs.load_data()
+    ecg_epochs.apply_baseline((None, None))
+    ecg_inds, scores_ecg = ica.find_bads_ecg(ecg_epochs, method='ctps', threshold=0.8)
+
+    # EOG
+    eog_epochs = mne.read_epochs(eog_epochs_path)
+    eog_epochs.decimate(5)
+    eog_epochs.load_data()
+    eog_epochs.apply_baseline((None, None))
+    eog_inds, scores_eog = ica.find_bads_eog(eog_epochs)
+
+    # save
+    np.savez(artifact_components_path, ecg_inds=ecg_inds, scores_ecg=scores_ecg, eog_inds=eog_inds,
+             scores_eog=scores_eog)
+
+
+rule select_artifact_components:
+    input:
+        ica = ica_template,
+        ecg_epochs = ecg_epochs_template,
+        eog_epochs = eog_epochs_template
+    output:
+        artifact_components = artifact_components_template
+    run:
+        select_artifact_components(ica_path=input.ica, ecg_epochs_path=input.ecg_epochs,
+            eog_epochs_path=input.eog_epochs, artifact_components_path=output.artifact_components)
+
+
+def clean_epochs(ica_path, artifact_components_path, epochs_path, epochs_cleaned_path):
+    # Load ica and bad components
+    ica = mne.preprocessing.read_ica(ica_path)
+    artifact_components = np.load(artifact_components_path)
+    ecg_inds, eog_inds = artifact_components['ecg_inds'], artifact_components['eog_inds']
+
+    # Set components to exclude
+    n_max_ecg = 3  # use max 3 ECG components
+    n_max_eog = 3  # use max 2 (sic) EOG components
+    ica.exclude = list(ecg_inds[:n_max_ecg]) + list(eog_inds[:n_max_eog])
+
+    # Remove artifact ICA components
+    epochs = mne.read_epochs(epochs_path)
+    epochs.load_data()
+    ica.apply(epochs)
+
+    # Use autoreject to remove bad epochs
+    reject = get_rejection_threshold(epochs.copy().crop(None, REJECT_TMAX),
+                                     random_state=RANDOM_STATE)
+    epochs.drop_bad(reject=reject)
+
+    # Save
+    epochs.save(epochs_cleaned_path)
+
+
+rule clean_epochs:
+    input:
+        ica = ica_template,
+        artifact_components = artifact_components_template,
+        epochs = epoched_template
+    output:
+        clean_epochs = epochs_cleaned_template
+    run:
+        clean_epochs(ica_path=input.ica, artifact_components_path=input.artifact_components,
+                     epochs_path=input.epochs, epochs_cleaned_path=output.clean_epochs)

@@ -12,3 +12,5 @@ dependencies:
   - conda-forge::autoreject=0.2.2
   # Only necessary because of a bug in autoreject 0.2.2 (see https://git.io/J46B9)
   - scikit-learn=0.23
+  - conda-forge::r-base
+  - conda-forge::r-rmarkdown

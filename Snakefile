@@ -645,3 +645,12 @@ rule apply_inverse_model:
         for evoked, stc_path in zip(evokeds, output.stcs):
             stc = apply_inverse(evoked, inverse_operator, lambda2, "dSPM", pick_ori='vector')
             stc.save(stc_path)
+
+
+rule make_report:
+    input:
+        'report.Rmd'
+    output:
+        'report.html'
+    shell:
+        'Rscript -e "rmarkdown::render(\'{input}\', output_file=\'{output}\')"'

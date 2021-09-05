@@ -14,3 +14,4 @@ dependencies:
   - scikit-learn=0.23
   - conda-forge::r-base=4.1.1
   - conda-forge::r-rmarkdown=2.10
+  - conda-forge::r-rjson=0.2.20

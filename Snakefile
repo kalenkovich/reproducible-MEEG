@@ -737,8 +737,14 @@ rule plot_erp:
 
 rule make_report:
     input:
-        'report.Rmd'
+        rmd = 'report.Rmd',
+        # Converting to posix-style paths is necessary on Windows when path become part of the code as below
+        erp = Path(rules.plot_erp.output.png).as_posix(),
+        erp_properties = Path(rules.plot_erp.output.properties).as_posix(),
     output:
         'report.html'
     shell:
-        'Rscript -e "rmarkdown::render(\'{input}\', output_file=\'{output}\')"'
+        ('Rscript -e "rmarkdown::render(\'{input.rmd}\', output_file = \'{output}\', params = list('
+         'erp = \'{input.erp}\','
+         'erp_properties = \'{input.erp_properties}\''
+         '))"')

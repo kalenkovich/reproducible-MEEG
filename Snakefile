@@ -1,3 +1,5 @@
+import json
+from distutils.version import LooseVersion
 from pathlib import Path
 import os
 import re
@@ -11,6 +13,7 @@ import mne
 
 # Helper functions
 from autoreject import get_rejection_threshold
+from matplotlib import pyplot as plt
 from mne.minimum_norm import make_inverse_operator, write_inverse_operator, apply_inverse, read_inverse_operator
 from mne.preprocessing import create_ecg_epochs, create_eog_epochs
 from sklearn.model_selection import KFold
@@ -81,6 +84,7 @@ preprocessing_dir = derivatives_dir / '01_preprocessing'
 # TODO: rename both the variable and the directory later
 processing_dir = derivatives_dir / '02_processing'
 source_modeling_dir = derivatives_dir / '03_source_modeling'
+plots_dir = derivatives_dir / '04_plots'
 
 openneuro_maxfiltered_dir = derivatives_dir / 'meg_derivatives'
 freesurfer_dir = data_dir / 'reconned'
@@ -188,7 +192,10 @@ rule all:
         transformation = expand(transformation_template, subject_number=['01']),
         forward_model = expand(forward_model_template, subject_number=['01']),
         inverse_model= expand(inverse_model_template, subject_number=['01']),
-        stc_template = expand(stc_template, subject_number=['01'], condition=CONDITIONS)
+        stc_template = expand(stc_template, subject_number=['01'], condition=CONDITIONS),
+        erp = plots_dir / 'erp.png',
+        erp_properties = plots_dir / 'erp.json',
+        manuscript_html = 'report.html'
 
 
 def calculate_ica(run_paths, output_path):
@@ -645,3 +652,100 @@ rule apply_inverse_model:
         for evoked, stc_path in zip(evokeds, output.stcs):
             stc = apply_inverse(evoked, inverse_operator, lambda2, "dSPM", pick_ori='vector')
             stc.save(stc_path)
+
+
+def _set_matplotlib_defaults():
+    import matplotlib.pyplot as plt
+    fontsize = 8
+    params = {'axes.labelsize': fontsize,
+              'legend.fontsize': fontsize,
+              'xtick.labelsize': fontsize,
+              'ytick.labelsize': fontsize,
+              'axes.titlesize': fontsize + 2,
+              'figure.max_open_warning': 200,
+              'axes.spines.top': False,
+              'axes.spines.right': False,
+              'axes.grid': True,
+              'lines.linewidth': 1,
+              }
+    import matplotlib
+    if LooseVersion(matplotlib.__version__) >= '2':
+        params['font.size'] = fontsize
+    else:
+        params['text.fontsize'] = fontsize
+    plt.rcParams.update(params)
+
+
+ERP_EEG_CHANNEL = 'EEG065'
+ANNOT_KWARGS = dict(fontsize=12, fontweight='bold',
+                    xycoords="axes fraction", ha='right', va='center')
+TMAX = 2.9  # min duration between onsets: (400 fix + 800 stim + 1700 ISI) ms
+
+
+def plot_erp(evokeds_path, png_path, properties_path):
+    l_freq = EPOCHS_L_FREQ
+
+    evokeds = mne.read_evokeds(evokeds_path)
+    idx = evokeds[0].ch_names.index(ERP_EEG_CHANNEL)
+    assert evokeds[1].ch_names[idx] == ERP_EEG_CHANNEL
+    assert evokeds[2].ch_names[idx] == ERP_EEG_CHANNEL
+    mapping = {'Famous': evokeds[0], 'Scrambled': evokeds[1],
+               'Unfamiliar': evokeds[2]}
+    colors =  {'Famous': 'blue', 'Scrambled': 'red',
+               'Unfamiliar': 'green'}
+
+    _set_matplotlib_defaults()
+
+    fig, ax = plt.subplots(1, figsize=(3.3, 2.3))
+    scale = 1e6
+    times = evokeds[0].times * 1000
+    for condition in ('Scrambled', 'Unfamiliar', 'Famous'):
+        ax.plot(times, mapping[condition].data[idx] * scale,
+                colors[condition], label=condition)
+    ax.grid(True)
+    ax.set(xlim=[-100, 1000 * TMAX], xlabel='Time (in ms after stimulus onset)',
+           ylim=[-12.5, 5], ylabel=u'Potential difference (μV)')
+    ax.axvline(800, ls='--', color='k')
+    if l_freq == 1:
+        ax.legend(loc='lower right')
+    ax.annotate('A' if l_freq is None else 'B', (-0.2, 1), **ANNOT_KWARGS)
+    fig.tight_layout(pad=0.5)
+    # plt.show()
+
+    fig.savefig(png_path)
+
+    baseline = tuple(np.round(evokeds[0].baseline, 3))
+    properties = dict(
+        sensor=ERP_EEG_CHANNEL,
+        baseline=baseline,
+        baseline_units='s',
+        colors=colors
+    )
+    with open(properties_path, 'w', encoding='utf-8') as f:
+        # code from https://stackoverflow.com/a/12309296
+        json.dump(properties, f, ensure_ascii=False, indent=4)
+
+
+rule plot_erp:
+    input:
+        evokeds = rules.group_average_evokeds.output.averaged_evokeds
+    output:
+        png = plots_dir / 'erp.png',
+        properties = plots_dir / 'erp.json'
+    run:
+        plot_erp(input.evokeds, output.png, output.properties)
+
+
+rule make_report:
+    input:
+        rmd = 'report.Rmd',
+        # Converting to posix-style paths is necessary on Windows when path become part of the code as below
+        erp = Path(rules.plot_erp.output.png).as_posix(),
+        erp_properties = Path(rules.plot_erp.output.properties).as_posix(),
+    output:
+        'report.html'
+    shell:
+        ('Rscript -e "rmarkdown::render(\'{input.rmd}\', output_file = \'{output}\', params = list('
+         'erp = \'{input.erp}\','
+         'erp_properties = \'{input.erp_properties}\''
+         '))"')

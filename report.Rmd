@@ -1,0 +1,28 @@
+---
+title: Reproducing the group report from Jas et al. 2018
+output: html_document
+params:
+  erp: ""
+  erp_properties: ""
+---
+
+# ERP
+
+```{r echo = FALSE}
+# Here, we assemble the figure caption using the parameters use when creaing the image.
+properties <- rjson::fromJSON(file = params$erp_properties)
+erp.caption <- sprintf(paste0(
+  'The plot shows the group-averaged evoked data from the %s sensor ',
+  'with the baseline correction from %d to %d ms before the stimulus ',
+  'across three conditions: famous faces (%s line), unfamiliar faces ',
+  '(%s line), and scrambled faces (%s line).'),
+  properties$sensor,
+  - properties$baseline[1] * 1000, - properties$baseline[2] * 1000,
+  properties$colors$Famous, properties$colors$Unfamiliar,
+  properties$colors$Scrambled
+)
+```
+
+```{r fig.cap = erp.caption, echo = FALSE}
+knitr::include_graphics(params$erp)
+```

@@ -195,6 +195,7 @@ rule all:
         stc_template = expand(stc_template, subject_number=['01'], condition=CONDITIONS),
         erp = plots_dir / 'erp.png',
         erp_properties = plots_dir / 'erp.json',
+        manuscript_html = 'report.html'
 
 
 def calculate_ica(run_paths, output_path):

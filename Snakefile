@@ -137,6 +137,9 @@ forward_model_template = (source_modeling_dir / 'sub-{subject_number}' /
 inverse_model_template = (source_modeling_dir / 'sub-{subject_number}' /
                           f'sub-{{subject_number}}_spacing-{SOURCE_SPACE_SPACING}-inv.fif')
 stc_template = source_modeling_dir / 'sub-{subject_number}' / 'sub-{subject_number}_condition-{condition}-stc.h5'
+stc_morphed_template = (source_modeling_dir / 'sub-{subject_number}' /
+                        'sub-{subject_number}_condition-{condition}-stcMorphed.h5')
+group_averaged_dspm_template = source_modeling_dir / 'condition-{condition}-stcMorphed.h5'
 
 
 wildcard_constraints:
@@ -192,7 +195,9 @@ rule all:
         transformation = expand(transformation_template, subject_number=subject_numbers),
         forward_model = expand(forward_model_template, subject_number=subject_numbers),
         inverse_model= expand(inverse_model_template, subject_number=subject_numbers),
-        stc_template = expand(stc_template, subject_number=subject_numbers, condition=CONDITIONS),
+        stc = expand(stc_template, subject_number=subject_numbers, condition=CONDITIONS),
+        stc_morphed = expand(stc_morphed_template, subject_number=subject_numbers, condition=CONDITIONS),
+        stc_morphed_average = expand(group_averaged_dspm_template, condition='contrast')[0],
         erp = plots_dir / 'erp.png',
         erp_properties = plots_dir / 'erp.json',
         manuscript_html = 'report.html'
@@ -652,6 +657,24 @@ rule apply_inverse_model:
         for evoked, stc_path in zip(evokeds, output.stcs):
             stc = apply_inverse(evoked, inverse_operator, lambda2, "dSPM", pick_ori='vector')
             stc.save(stc_path)
+
+
+rule morph_stc:
+    input:
+        stc = stc_template
+    output:
+        stc_morphed = stc_morphed_template
+    run:
+        pass
+
+
+rule group_average_dspm_sources:
+    input:
+        morphed_contrasts = expand(stc_morphed_template, condition='contrast', subject_number=subject_numbers)
+    output:
+        averaged_sources = group_averaged_dspm_template
+    run:
+        pass
 
 
 def _set_matplotlib_defaults():

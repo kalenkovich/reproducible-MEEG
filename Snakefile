@@ -189,10 +189,10 @@ rule all:
                      condition=('face', 'scrambled')),
         group_average_evokeds = group_average_evokeds_path,
         # TODO: run for all subjects once we have run FreeSurfer on all of them
-        transformation = expand(transformation_template, subject_number=['01']),
-        forward_model = expand(forward_model_template, subject_number=['01']),
-        inverse_model= expand(inverse_model_template, subject_number=['01']),
-        stc_template = expand(stc_template, subject_number=['01'], condition=CONDITIONS),
+        transformation = expand(transformation_template, subject_number=subject_numbers),
+        forward_model = expand(forward_model_template, subject_number=subject_numbers),
+        inverse_model= expand(inverse_model_template, subject_number=subject_numbers),
+        stc_template = expand(stc_template, subject_number=subject_numbers, condition=CONDITIONS),
         erp = plots_dir / 'erp.png',
         erp_properties = plots_dir / 'erp.json',
         manuscript_html = 'report.html'

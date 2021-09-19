@@ -137,6 +137,7 @@ forward_model_template = (source_modeling_dir / 'sub-{subject_number}' /
 inverse_model_template = (source_modeling_dir / 'sub-{subject_number}' /
                           f'sub-{{subject_number}}_spacing-{SOURCE_SPACE_SPACING}-inv.fif')
 stc_template = source_modeling_dir / 'sub-{subject_number}' / 'sub-{subject_number}_condition-{condition}-stc.h5'
+morph_matrix_template = source_modeling_dir / 'sub-{subject_number}' / 'sub-{subject_number}_-morphMatrix.npz'
 stc_morphed_template = (source_modeling_dir / 'sub-{subject_number}' /
                         'sub-{subject_number}_condition-{condition}-stcMorphed.h5')
 group_averaged_dspm_template = source_modeling_dir / 'condition-{condition}-stcMorphed.h5'
@@ -659,9 +660,19 @@ rule apply_inverse_model:
             stc.save(stc_path)
 
 
+rule compute_morph_matrix:
+    input:
+        random_stc = expand(stc_template, condition=CONDITIONS, allow_missing=True)[0],
+    output:
+        morph_martix = morph_matrix_template
+    run:
+        pass
+
+
 rule morph_stc:
     input:
-        stc = stc_template
+        stc = stc_template,
+        morph_matrix = morph_matrix_template
     output:
         stc_morphed = stc_morphed_template
     run:

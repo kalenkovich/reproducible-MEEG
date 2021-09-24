@@ -697,7 +697,13 @@ rule group_average_dspm_sources:
     output:
         averaged_sources = group_averaged_dspm_template
     run:
-        pass
+        stcs = [mne.read_source_estimate(stc_path) for stc_path in input.morphed_contrasts]
+        data = np.average([s.data for s in stcs],axis=0)
+        random_stc = stcs[0]
+        Stc_Class = type(random_stc)
+        stc = Stc_Class(data,random_stc.vertices,
+            random_stc.tmin,random_stc.tstep,random_stc.subject)
+        stc.save(output.averaged_sources)
 
 
 def _set_matplotlib_defaults():

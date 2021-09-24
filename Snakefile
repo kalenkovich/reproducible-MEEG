@@ -685,7 +685,10 @@ rule morph_stc:
     output:
         stc_morphed = stc_morphed_template
     run:
-        pass
+        morph = mne.read_source_morph(input.morph_matrix)
+        stc = mne.read_source_estimate(input.stc)
+        morphed = morph.apply(stc)
+        morphed.save(output.stc_morphed)
 
 
 rule group_average_dspm_sources:

@@ -137,7 +137,7 @@ forward_model_template = (source_modeling_dir / 'sub-{subject_number}' /
 inverse_model_template = (source_modeling_dir / 'sub-{subject_number}' /
                           f'sub-{{subject_number}}_spacing-{SOURCE_SPACE_SPACING}-inv.fif')
 stc_template = source_modeling_dir / 'sub-{subject_number}' / 'sub-{subject_number}_condition-{condition}-stc.h5'
-morph_matrix_template = source_modeling_dir / 'sub-{subject_number}' / 'sub-{subject_number}_-morphMatrix.npz'
+morph_matrix_template = source_modeling_dir / 'sub-{subject_number}' / 'sub-{subject_number}-morph.h5'
 stc_morphed_template = (source_modeling_dir / 'sub-{subject_number}' /
                         'sub-{subject_number}_condition-{condition}-stcMorphed.h5')
 group_averaged_dspm_template = source_modeling_dir / 'condition-{condition}-stcMorphed.h5'
@@ -660,13 +660,22 @@ rule apply_inverse_model:
             stc.save(stc_path)
 
 
+SMOOTH = 10
+
+
 rule compute_morph_matrix:
     input:
         random_stc = expand(stc_template, condition=CONDITIONS, allow_missing=True)[0],
     output:
-        morph_martix = morph_matrix_template
+        morph_matrix = morph_matrix_template
     run:
-        pass
+        stc = mne.read_source_estimate(input.random_stc)
+        morph = mne.compute_source_morph(
+            src=stc,
+            subject_to='fsaverage',
+            subjects_dir=freesurfer_dir,
+            smooth=SMOOTH)
+        morph.save(output.morph_matrix)
 
 
 rule morph_stc:

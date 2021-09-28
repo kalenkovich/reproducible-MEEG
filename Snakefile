@@ -142,6 +142,11 @@ dspm_stc_template = (source_modeling_dir / 'sub-{subject_number}' /
 dspm_stc_morphed_template = (source_modeling_dir / 'sub-{subject_number}' /
                              'sub-{subject_number}_condition-{condition}_algorithm-dSPM-stcMorphed.h5')
 dspm_stc_averaged_template = source_modeling_dir / 'condition-{condition}_algorithm-dSPM.h5'
+lcmv_stc_template = source_modeling_dir / 'sub-{subject_number}' / ('sub-{subject_number}_condition-contrast'
+                                                                    '_algorithm-LCMV-{hemisphere}.stc')
+lcmv_stc_morphed_template = (source_modeling_dir / 'sub-{subject_number}' /
+                             'sub-{subject_number}_condition-contrast_algorithm-LCMV_morphed-{hemisphere}.stc')
+lcmv_stc_averaged_template = source_modeling_dir / 'condition-contrast_algorithm-LCMV-{hemisphere}.stc'
 
 
 wildcard_constraints:
@@ -175,6 +180,10 @@ TMAX = 2.9  # min duration between onsets: (400 fix + 800 stim + 1700 ISI) ms
 REJECT_TMAX = 0.8  # duration we really care about
 
 
+# Hemispheres form LCMV source estimates that are saved into two files
+HEMISPHERES = ['lh', 'rh']
+
+
 # Rules and functions that execute them
 
 rule all:
@@ -200,6 +209,9 @@ rule all:
         dspm_stc = expand(dspm_stc_template, subject_number=subject_numbers, condition=CONDITIONS),
         dspm_stc_morphed = expand(dspm_stc_morphed_template, subject_number=subject_numbers, condition=CONDITIONS),
         dspm_stc_morphed_average = expand(dspm_stc_averaged_template, condition='contrast')[0],
+        lcmv_stc = expand(lcmv_stc_template, subject_number=subject_numbers, hemisphere=HEMISPHERES),
+        lcmv_stc_morphed = expand(lcmv_stc_morphed_template, subject_number=subject_numbers, hemisphere=HEMISPHERES),
+        lcmv_stc_morphed_average = expand(lcmv_stc_averaged_template, hemisphere=HEMISPHERES),
         erp = plots_dir / 'erp.png',
         erp_properties = plots_dir / 'erp.json',
         manuscript_html = 'report.html'
@@ -705,6 +717,37 @@ rule group_average_dspm_sources:
         stc = Stc_Class(data,random_stc.vertices,
             random_stc.tmin,random_stc.tstep,random_stc.subject)
         stc.save(output.averaged_sources)
+
+
+rule apply_lcmv:
+    input:
+        epochs= epochs_cleaned_template,
+        evoked= evoked_template,
+        covariance= covariance_template,
+        forward_model= forward_model_template
+    output:
+        stcs = expand(lcmv_stc_template, hemisphere=HEMISPHERES, allow_missing=True)
+    run:
+        pass
+
+
+rule moprh_lcmv:
+    input:
+        stc = lcmv_stc_template,
+        morph_matrix = morph_matrix_template
+    output:
+        stc_morphed = lcmv_stc_morphed_template
+    run:
+        pass
+
+
+rule group_average_lcmv_sources:
+    input:
+        morphed_contrasts = expand(lcmv_stc_morphed_template, subject_number=subject_numbers, hemisphere=HEMISPHERES)
+    output:
+        averaged_sources = lcmv_stc_averaged_template
+    run:
+        pass
 
 
 def _set_matplotlib_defaults():

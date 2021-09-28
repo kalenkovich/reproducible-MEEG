@@ -136,11 +136,12 @@ forward_model_template = (source_modeling_dir / 'sub-{subject_number}' /
                           f'sub-{{subject_number}}_spacing-{SOURCE_SPACE_SPACING}-fwd.fif')
 inverse_model_template = (source_modeling_dir / 'sub-{subject_number}' /
                           f'sub-{{subject_number}}_spacing-{SOURCE_SPACE_SPACING}-inv.fif')
-stc_template = source_modeling_dir / 'sub-{subject_number}' / 'sub-{subject_number}_condition-{condition}-stc.h5'
 morph_matrix_template = source_modeling_dir / 'sub-{subject_number}' / 'sub-{subject_number}-morph.h5'
-stc_morphed_template = (source_modeling_dir / 'sub-{subject_number}' /
-                        'sub-{subject_number}_condition-{condition}-stcMorphed.h5')
-group_averaged_dspm_template = source_modeling_dir / 'condition-{condition}-stcMorphed.h5'
+dspm_stc_template = (source_modeling_dir / 'sub-{subject_number}' /
+                     'sub-{subject_number}_condition-{condition}_algorithm-dSPM-stc.h5')
+dspm_stc_morphed_template = (source_modeling_dir / 'sub-{subject_number}' /
+                             'sub-{subject_number}_condition-{condition}_algorithm-dSPM-stcMorphed.h5')
+dspm_stc_averaged_template = source_modeling_dir / 'condition-{condition}_algorithm-dSPM.h5'
 
 
 wildcard_constraints:
@@ -196,9 +197,9 @@ rule all:
         transformation = expand(transformation_template, subject_number=subject_numbers),
         forward_model = expand(forward_model_template, subject_number=subject_numbers),
         inverse_model= expand(inverse_model_template, subject_number=subject_numbers),
-        stc = expand(stc_template, subject_number=subject_numbers, condition=CONDITIONS),
-        stc_morphed = expand(stc_morphed_template, subject_number=subject_numbers, condition=CONDITIONS),
-        stc_morphed_average = expand(group_averaged_dspm_template, condition='contrast')[0],
+        dspm_stc = expand(dspm_stc_template, subject_number=subject_numbers, condition=CONDITIONS),
+        dspm_stc_morphed = expand(dspm_stc_morphed_template, subject_number=subject_numbers, condition=CONDITIONS),
+        dspm_stc_morphed_average = expand(dspm_stc_averaged_template, condition='contrast')[0],
         erp = plots_dir / 'erp.png',
         erp_properties = plots_dir / 'erp.json',
         manuscript_html = 'report.html'
@@ -640,12 +641,12 @@ rule make_inverse_model:
         write_inverse_operator(output.inverse_model, inverse_operator)
 
 
-rule apply_inverse_model:
+rule apply_dspm:
     input:
         evoked = evoked_template,
         inverse_model = inverse_model_template
     output:
-        stcs = expand(stc_template, condition=CONDITIONS, allow_missing=True)
+        stcs = expand(dspm_stc_template, condition=CONDITIONS, allow_missing=True)
     run:
         # Load
         evokeds = mne.read_evokeds(input.evoked, condition=CONDITIONS)
@@ -665,7 +666,7 @@ SMOOTH = 10
 
 rule compute_morph_matrix:
     input:
-        random_stc = expand(stc_template, condition=CONDITIONS, allow_missing=True)[0],
+        random_stc = expand(dspm_stc_template, condition=CONDITIONS, allow_missing=True)[0],
     output:
         morph_matrix = morph_matrix_template
     run:
@@ -678,12 +679,12 @@ rule compute_morph_matrix:
         morph.save(output.morph_matrix)
 
 
-rule morph_stc:
+rule morph_dspm:
     input:
-        stc = stc_template,
+        stc = dspm_stc_template,
         morph_matrix = morph_matrix_template
     output:
-        stc_morphed = stc_morphed_template
+        stc_morphed = dspm_stc_morphed_template
     run:
         morph = mne.read_source_morph(input.morph_matrix)
         stc = mne.read_source_estimate(input.stc)
@@ -693,9 +694,9 @@ rule morph_stc:
 
 rule group_average_dspm_sources:
     input:
-        morphed_contrasts = expand(stc_morphed_template, condition='contrast', subject_number=subject_numbers)
+        morphed_contrasts = expand(dspm_stc_morphed_template, condition='contrast', subject_number=subject_numbers)
     output:
-        averaged_sources = group_averaged_dspm_template
+        averaged_sources = dspm_stc_averaged_template
     run:
         stcs = [mne.read_source_estimate(stc_path) for stc_path in input.morphed_contrasts]
         data = np.average([s.data for s in stcs],axis=0)

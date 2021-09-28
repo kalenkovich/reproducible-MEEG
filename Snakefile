@@ -719,6 +719,15 @@ rule group_average_dspm_sources:
         stc.save(output.averaged_sources)
 
 
+def _get_stem(two_hemisphere_files):
+    suffix = '-lh.stc'
+    n_to_remove = len(suffix)
+    assert fnames_output[0][-n_to_remove:] == suffix
+    stem = fnames_output[0][:-n_to_remove]
+    assert fnames_output[1][:-n_to_remove] == stem
+    return stem
+
+
 def run_lcmv(fname_epo, fname_ave, fname_cov, fname_fwd, fnames_output):
     """
     Runs mne.beamformer.make_lcmv and mne.beamformer.apply_lcmv to get the LCMV solution to the inverse problem.
@@ -743,12 +752,7 @@ def run_lcmv(fname_epo, fname_ave, fname_cov, fname_fwd, fnames_output):
     stc = mne.beamformer.apply_lcmv(evoked, filters=beamformer, max_ori_out='signed')
 
     # Parse out the common stem of the output file paths and save
-    suffix = '-lh.stc'
-    n_to_remove = len(suffix)
-    assert fnames_output[0][-n_to_remove:] == suffix
-    stem = fnames_output[0][:-n_to_remove]
-    assert fnames_output[1][:-n_to_remove] == stem
-
+    stem = _get_stem(fnames_output)
     stc.save(stem)
 
 

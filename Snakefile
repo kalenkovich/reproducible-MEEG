@@ -719,6 +719,39 @@ rule group_average_dspm_sources:
         stc.save(output.averaged_sources)
 
 
+def run_lcmv(fname_epo, fname_ave, fname_cov, fname_fwd, fnames_output):
+    """
+    Runs mne.beamformer.make_lcmv and mne.beamformer.apply_lcmv to get the LCMV solution to the inverse problem.
+    :param fname_epo: epochs
+    :param fname_ave: evoked data
+    :param fname_cov: covariance
+    :param fname_fwd: forward model
+    :param fnames_output: list of two paths where solutions for the left and right hemisphere respectivelye will be
+     stored. See mne.SourceEstimate.save for details.
+    :return: None
+    """
+    epochs = mne.read_epochs(fname_epo, preload=False)
+    data_cov = mne.compute_covariance(
+        epochs[['face', 'scrambled']], tmin=0.03, tmax=0.3, method='shrunk')
+    evoked = mne.read_evokeds(fname_ave, condition='contrast')
+    noise_cov = mne.read_cov(fname_cov)
+    forward = mne.read_forward_solution(fname_fwd)
+    forward = mne.convert_forward_solution(forward, surf_ori=True)
+    beamformer = mne.beamformer.make_lcmv(
+        evoked.info, forward=forward, noise_cov=noise_cov, data_cov=data_cov,
+        pick_ori='max-power', weight_norm='unit-noise-gain', rank=None)
+    stc = mne.beamformer.apply_lcmv(evoked, filters=beamformer, max_ori_out='signed')
+
+    # Parse out the common stem of the output file paths and save
+    suffix = '-lh.stc'
+    n_to_remove = len(suffix)
+    assert fnames_output[0][-n_to_remove:] == suffix
+    stem = fnames_output[0][:-n_to_remove]
+    assert fnames_output[1][:-n_to_remove] == stem
+
+    stc.save(stem)
+
+
 rule apply_lcmv:
     input:
         epochs= epochs_cleaned_template,
@@ -726,9 +759,10 @@ rule apply_lcmv:
         covariance= covariance_template,
         forward_model= forward_model_template
     output:
-        stcs = expand(lcmv_stc_template, hemisphere=HEMISPHERES, allow_missing=True)
+        stc = expand(lcmv_stc_template, hemisphere=HEMISPHERES, allow_missing=True)
     run:
-        pass
+        run_lcmv(fname_epo=input.epochs, fname_ave=input.evoked, fname_cov=input.covariance,
+                 fname_fwd=input.forward_model, fnames_output=output.stc)
 
 
 rule moprh_lcmv:

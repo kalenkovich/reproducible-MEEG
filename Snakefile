@@ -776,7 +776,10 @@ rule morph_lcmv:
     output:
         stcs_morphed = expand(lcmv_stc_morphed_template, hemisphere=HEMISPHERES, allow_missing=True)
     run:
-        pass
+        morph = mne.read_source_morph(input.morph_matrix)
+        stc = mne.read_source_estimate(_get_stem(input.stcs))
+        morphed = morph.apply(stc)
+        morphed.save(_get_stem(output.stc_morphed))
 
 
 rule group_average_lcmv_sources:

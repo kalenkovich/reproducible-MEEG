@@ -769,12 +769,12 @@ rule apply_lcmv:
                  fname_fwd=input.forward_model, fnames_output=output.stc)
 
 
-rule moprh_lcmv:
+rule morph_lcmv:
     input:
-        stc = lcmv_stc_template,
+        stcs = expand(lcmv_stc_template, hemisphere=HEMISPHERES, allow_missing=True),
         morph_matrix = morph_matrix_template
     output:
-        stc_morphed = lcmv_stc_morphed_template
+        stcs_morphed = expand(lcmv_stc_morphed_template, hemisphere=HEMISPHERES, allow_missing=True)
     run:
         pass
 
@@ -783,7 +783,7 @@ rule group_average_lcmv_sources:
     input:
         morphed_contrasts = expand(lcmv_stc_morphed_template, subject_number=subject_numbers, hemisphere=HEMISPHERES)
     output:
-        averaged_sources = lcmv_stc_averaged_template
+        averaged_sources = expand(lcmv_stc_averaged_template, hemisphere=HEMISPHERES)
     run:
         pass
 

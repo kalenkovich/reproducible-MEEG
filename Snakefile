@@ -704,19 +704,26 @@ rule morph_dspm:
         morphed.save(output.stc_morphed)
 
 
+def group_average_stcs(stc_paths, output_path):
+    """
+    :param stc_paths: list of file paths of stcs or stems in case of files split into hemisphere-specific files
+    """
+    stcs = [mne.read_source_estimate(stc_path) for stc_path in stc_paths]
+    data = np.average([s.data for s in stcs],axis=0)
+    random_stc = stcs[0]
+    StcClass = type(random_stc)
+    stc = StcClass(data,random_stc.vertices,
+        random_stc.tmin,random_stc.tstep,random_stc.subject)
+    stc.save(output_path)
+
+
 rule group_average_dspm_sources:
     input:
         morphed_contrasts = expand(dspm_stc_morphed_template, condition='contrast', subject_number=subject_numbers)
     output:
         averaged_sources = dspm_stc_averaged_template
     run:
-        stcs = [mne.read_source_estimate(stc_path) for stc_path in input.morphed_contrasts]
-        data = np.average([s.data for s in stcs],axis=0)
-        random_stc = stcs[0]
-        Stc_Class = type(random_stc)
-        stc = Stc_Class(data,random_stc.vertices,
-            random_stc.tmin,random_stc.tstep,random_stc.subject)
-        stc.save(output.averaged_sources)
+        group_average_stcs(stc_paths=input.morphed_contrasts, output_path=output.averaged_sources)
 
 
 def _get_stem(two_hemisphere_files):

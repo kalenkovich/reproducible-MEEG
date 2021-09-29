@@ -722,9 +722,9 @@ rule group_average_dspm_sources:
 def _get_stem(two_hemisphere_files):
     suffix = '-lh.stc'
     n_to_remove = len(suffix)
-    assert fnames_output[0][-n_to_remove:] == suffix
-    stem = fnames_output[0][:-n_to_remove]
-    assert fnames_output[1][:-n_to_remove] == stem
+    assert two_hemisphere_files[0][-n_to_remove:] == suffix
+    stem = two_hemisphere_files[0][:-n_to_remove]
+    assert two_hemisphere_files[1][:-n_to_remove] == stem
     return stem
 
 

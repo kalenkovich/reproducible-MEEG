@@ -47,7 +47,7 @@ CONDITIONS = ['scrambled', 'unfamiliar', 'famous', 'faces', 'contrast', 'faces_e
 
 
 # Folders
-data_dir = Path(os.environ['reproduction-data'])
+data_dir = Path(os.environ['reproduction_data'])
 downloads_dir = data_dir / 'downloads'
 bids_dir = data_dir / 'bids'
 derivatives_dir = bids_dir / 'derivatives'

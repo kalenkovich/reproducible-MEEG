@@ -70,7 +70,7 @@ events_template = (bids_dir / 'sub-{subject_number}' / 'ses-meg' / 'meg' /
 filtered_template = (preprocessing_dir / 'sub-{subject_number}' / 'ses-meg' / 'meg' /
                      'sub-{subject_number}_ses-meg_task-facerecognition_run-{run_id}_filteredHighPass{l_freq}.fif')
 ica_template = (preprocessing_dir / 'sub-{subject_number}' / 'ses-meg' / 'meg' /
-                'sub-{subject_number}_ses-meg_task-facerecognition_filtered.fif')
+                'sub-{subject_number}_ses-meg_task-facerecognition_ica.fif')
 maxfilter_log_template = (openneuro_maxfiltered_dir / 'sub-{subject_number}' / 'ses-meg' / 'meg' /
                           'sub-{subject_number}_ses-meg_task-facerecognition_run-{run_id}_proc-sss_log.txt')
 bad_channels_template = (preprocessing_dir / 'sub-{subject_number}' / 'ses-meg' / 'meg' /
@@ -95,7 +95,7 @@ covariance_template = (processing_dir / 'sub-{subject_number}' / 'ses-meg' / 'me
                        'sub-{subject_number}_ses-meg_task-facerecognition_cov.fif')
 tfr_template = (processing_dir / 'sub-{subject_number}' / 'ses-meg' / 'meg' /
                 'sub-{subject_number}_ses-meg_task-facerecognition_{measure}-{condition}.fif')
-group_average_evokeds_path = processing_dir / 'ses-meg' / 'meg' / 'ses-meg_task-facerecognition_evo-ave.fif'
+group_average_evokeds_path = processing_dir / 'ses-meg' / 'meg' / 'ses-meg_task-facerecognition_averaged-evo.fif'
 bids_t1_sidecar_template = (bids_dir / 'sub-{subject_number}' / 'ses-mri' / 'anat' /
                             'sub-{subject_number}_ses-mri_acq-mprage_T1w.json')
 bids_t1_template = bids_t1_sidecar_template.with_suffix('.nii.gz')

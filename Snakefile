@@ -779,7 +779,7 @@ rule morph_lcmv:
         morph = mne.read_source_morph(input.morph_matrix)
         stc = mne.read_source_estimate(_get_stem(input.stcs))
         morphed = morph.apply(stc)
-        morphed.save(_get_stem(output.stc_morphed))
+        morphed.save(_get_stem(output.stcs_morphed))
 
 
 rule group_average_lcmv_sources:

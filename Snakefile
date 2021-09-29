@@ -789,13 +789,20 @@ rule morph_lcmv:
         morphed.save(_get_stem(output.stcs_morphed))
 
 
+def _get_stems(list_of_hemisphere_pairs):
+    lhs, rhs = list_of_hemisphere_pairs[::2], list_of_hemisphere_pairs[1::2]
+    stems = [_get_stem([lh, rh]) for (lh, rh) in zip(lhs,rhs)]
+    return stems
+
+
 rule group_average_lcmv_sources:
     input:
         morphed_contrasts = expand(lcmv_stc_morphed_template, subject_number=subject_numbers, hemisphere=HEMISPHERES)
     output:
         averaged_sources = expand(lcmv_stc_averaged_template, hemisphere=HEMISPHERES)
     run:
-        pass
+        group_average_stcs(stc_paths=_get_stems(input.morphed_contrasts),
+                           output_path=_get_stem(output.averaged_sources))
 
 
 def _set_matplotlib_defaults():

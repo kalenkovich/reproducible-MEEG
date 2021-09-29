@@ -90,12 +90,12 @@ artifact_components_template = (preprocessing_dir / 'sub-{subject_number}' / 'se
 epochs_cleaned_template = (preprocessing_dir / 'sub-{subject_number}' / 'ses-meg' / 'meg' /
                            'sub-{subject_number}_ses-meg_task-facerecognition_cleaned_epo.fif')
 evoked_template = (processing_dir / 'sub-{subject_number}' / 'ses-meg' / 'meg' /
-                   'sub-{subject_number}_ses-meg_task-facerecognition_evo.fif')
+                   'sub-{subject_number}_ses-meg_task-facerecognition_ave.fif')
 covariance_template = (processing_dir / 'sub-{subject_number}' / 'ses-meg' / 'meg' /
                        'sub-{subject_number}_ses-meg_task-facerecognition_cov.fif')
 tfr_template = (processing_dir / 'sub-{subject_number}' / 'ses-meg' / 'meg' /
                 'sub-{subject_number}_ses-meg_task-facerecognition_{measure}-{condition}.fif')
-group_average_evokeds_path = processing_dir / 'ses-meg' / 'meg' / 'ses-meg_task-facerecognition_averaged-evo.fif'
+group_average_evokeds_path = processing_dir / 'ses-meg' / 'meg' / 'ses-meg_task-facerecognition_grand-ave.fif'
 bids_t1_sidecar_template = (bids_dir / 'sub-{subject_number}' / 'ses-mri' / 'anat' /
                             'sub-{subject_number}_ses-mri_acq-mprage_T1w.json')
 bids_t1_template = bids_t1_sidecar_template.with_suffix('.nii.gz')

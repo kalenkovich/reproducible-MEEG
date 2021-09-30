@@ -136,7 +136,17 @@ forward_model_template = (source_modeling_dir / 'sub-{subject_number}' /
                           f'sub-{{subject_number}}_spacing-{SOURCE_SPACE_SPACING}-fwd.fif')
 inverse_model_template = (source_modeling_dir / 'sub-{subject_number}' /
                           f'sub-{{subject_number}}_spacing-{SOURCE_SPACE_SPACING}-inv.fif')
-stc_template = source_modeling_dir / 'sub-{subject_number}' / 'sub-{subject_number}_condition-{condition}-stc.h5'
+morph_matrix_template = source_modeling_dir / 'sub-{subject_number}' / 'sub-{subject_number}-morph.h5'
+dspm_stc_template = (source_modeling_dir / 'sub-{subject_number}' /
+                     'sub-{subject_number}_condition-{condition}_algorithm-dSPM-stc.h5')
+dspm_stc_morphed_template = (source_modeling_dir / 'sub-{subject_number}' /
+                             'sub-{subject_number}_condition-{condition}_algorithm-dSPM-stcMorphed.h5')
+dspm_stc_averaged_template = source_modeling_dir / 'condition-{condition}_algorithm-dSPM.h5'
+lcmv_stc_template = source_modeling_dir / 'sub-{subject_number}' / ('sub-{subject_number}_condition-contrast'
+                                                                    '_algorithm-LCMV-{hemisphere}.stc')
+lcmv_stc_morphed_template = (source_modeling_dir / 'sub-{subject_number}' /
+                             'sub-{subject_number}_condition-contrast_algorithm-LCMV_morphed-{hemisphere}.stc')
+lcmv_stc_averaged_template = source_modeling_dir / 'condition-contrast_algorithm-LCMV-{hemisphere}.stc'
 
 
 wildcard_constraints:
@@ -170,6 +180,10 @@ TMAX = 2.9  # min duration between onsets: (400 fix + 800 stim + 1700 ISI) ms
 REJECT_TMAX = 0.8  # duration we really care about
 
 
+# Hemispheres form LCMV source estimates that are saved into two files
+HEMISPHERES = ['lh', 'rh']
+
+
 # Rules and functions that execute them
 
 rule all:
@@ -192,7 +206,12 @@ rule all:
         transformation = expand(transformation_template, subject_number=subject_numbers),
         forward_model = expand(forward_model_template, subject_number=subject_numbers),
         inverse_model= expand(inverse_model_template, subject_number=subject_numbers),
-        stc_template = expand(stc_template, subject_number=subject_numbers, condition=CONDITIONS),
+        dspm_stc = expand(dspm_stc_template, subject_number=subject_numbers, condition=CONDITIONS),
+        dspm_stc_morphed = expand(dspm_stc_morphed_template, subject_number=subject_numbers, condition=CONDITIONS),
+        dspm_stc_morphed_average = expand(dspm_stc_averaged_template, condition='contrast')[0],
+        lcmv_stc = expand(lcmv_stc_template, subject_number=subject_numbers, hemisphere=HEMISPHERES),
+        lcmv_stc_morphed = expand(lcmv_stc_morphed_template, subject_number=subject_numbers, hemisphere=HEMISPHERES),
+        lcmv_stc_morphed_average = expand(lcmv_stc_averaged_template, hemisphere=HEMISPHERES),
         erp = plots_dir / 'erp.png',
         erp_properties = plots_dir / 'erp.json',
         manuscript_html = 'report.html'
@@ -634,12 +653,12 @@ rule make_inverse_model:
         write_inverse_operator(output.inverse_model, inverse_operator)
 
 
-rule apply_inverse_model:
+rule apply_dspm:
     input:
         evoked = evoked_template,
         inverse_model = inverse_model_template
     output:
-        stcs = expand(stc_template, condition=CONDITIONS, allow_missing=True)
+        stcs = expand(dspm_stc_template, condition=CONDITIONS, allow_missing=True)
     run:
         # Load
         evokeds = mne.read_evokeds(input.evoked, condition=CONDITIONS)
@@ -652,6 +671,137 @@ rule apply_inverse_model:
         for evoked, stc_path in zip(evokeds, output.stcs):
             stc = apply_inverse(evoked, inverse_operator, lambda2, "dSPM", pick_ori='vector')
             stc.save(stc_path)
+
+
+SMOOTH = 10
+
+
+rule compute_morph_matrix:
+    input:
+        random_stc = expand(dspm_stc_template, condition=CONDITIONS, allow_missing=True)[0],
+    output:
+        morph_matrix = morph_matrix_template
+    run:
+        stc = mne.read_source_estimate(input.random_stc)
+        morph = mne.compute_source_morph(
+            src=stc,
+            subject_to='fsaverage',
+            subjects_dir=freesurfer_dir,
+            smooth=SMOOTH)
+        morph.save(output.morph_matrix)
+
+
+rule morph_dspm:
+    input:
+        stc = dspm_stc_template,
+        morph_matrix = morph_matrix_template
+    output:
+        stc_morphed = dspm_stc_morphed_template
+    run:
+        morph = mne.read_source_morph(input.morph_matrix)
+        stc = mne.read_source_estimate(input.stc)
+        morphed = morph.apply(stc)
+        morphed.save(output.stc_morphed)
+
+
+def group_average_stcs(stc_paths, output_path):
+    """
+    :param stc_paths: list of file paths of stcs or stems in case of files split into hemisphere-specific files
+    """
+    stcs = [mne.read_source_estimate(stc_path) for stc_path in stc_paths]
+    data = np.average([s.data for s in stcs],axis=0)
+    random_stc = stcs[0]
+    StcClass = type(random_stc)
+    stc = StcClass(data, random_stc.vertices, random_stc.tmin, random_stc.tstep, random_stc.subject)
+    stc.save(output_path)
+
+
+rule group_average_dspm_sources:
+    input:
+        morphed_contrasts = expand(dspm_stc_morphed_template, condition='contrast', subject_number=subject_numbers)
+    output:
+        averaged_sources = dspm_stc_averaged_template
+    run:
+        group_average_stcs(stc_paths=input.morphed_contrasts, output_path=output.averaged_sources)
+
+
+def _get_stem(two_hemisphere_files):
+    suffix = '-lh.stc'
+    n_to_remove = len(suffix)
+    assert two_hemisphere_files[0][-n_to_remove:] == suffix
+    stem = two_hemisphere_files[0][:-n_to_remove]
+    assert two_hemisphere_files[1][:-n_to_remove] == stem
+    return stem
+
+
+def run_lcmv(fname_epo, fname_ave, fname_cov, fname_fwd, fnames_output):
+    """
+    Runs mne.beamformer.make_lcmv and mne.beamformer.apply_lcmv to get the LCMV solution to the inverse problem.
+    :param fname_epo: epochs
+    :param fname_ave: evoked data
+    :param fname_cov: covariance
+    :param fname_fwd: forward model
+    :param fnames_output: list of two paths where solutions for the left and right hemisphere respectivelye will be
+     stored. See mne.SourceEstimate.save for details.
+    :return: None
+    """
+    epochs = mne.read_epochs(fname_epo, preload=False)
+    data_cov = mne.compute_covariance(
+        epochs[['face', 'scrambled']], tmin=0.03, tmax=0.3, method='shrunk')
+    evoked = mne.read_evokeds(fname_ave, condition='contrast')
+    noise_cov = mne.read_cov(fname_cov)
+    forward = mne.read_forward_solution(fname_fwd)
+    forward = mne.convert_forward_solution(forward, surf_ori=True)
+    beamformer = mne.beamformer.make_lcmv(
+        evoked.info, forward=forward, noise_cov=noise_cov, data_cov=data_cov,
+        pick_ori='max-power', weight_norm='unit-noise-gain', rank=None)
+    stc = mne.beamformer.apply_lcmv(evoked, filters=beamformer, max_ori_out='signed')
+
+    # Parse out the common stem of the output file paths and save
+    stem = _get_stem(fnames_output)
+    stc.save(stem)
+
+
+rule apply_lcmv:
+    input:
+        epochs= epochs_cleaned_template,
+        evoked= evoked_template,
+        covariance= covariance_template,
+        forward_model= forward_model_template
+    output:
+        stc = expand(lcmv_stc_template, hemisphere=HEMISPHERES, allow_missing=True)
+    run:
+        run_lcmv(fname_epo=input.epochs, fname_ave=input.evoked, fname_cov=input.covariance,
+                 fname_fwd=input.forward_model, fnames_output=output.stc)
+
+
+rule morph_lcmv:
+    input:
+        stcs = expand(lcmv_stc_template, hemisphere=HEMISPHERES, allow_missing=True),
+        morph_matrix = morph_matrix_template
+    output:
+        stcs_morphed = expand(lcmv_stc_morphed_template, hemisphere=HEMISPHERES, allow_missing=True)
+    run:
+        morph = mne.read_source_morph(input.morph_matrix)
+        stc = mne.read_source_estimate(_get_stem(input.stcs))
+        morphed = morph.apply(stc)
+        morphed.save(_get_stem(output.stcs_morphed))
+
+
+def _get_stems(list_of_hemisphere_pairs):
+    lhs, rhs = list_of_hemisphere_pairs[::2], list_of_hemisphere_pairs[1::2]
+    stems = [_get_stem([lh, rh]) for (lh, rh) in zip(lhs,rhs)]
+    return stems
+
+
+rule group_average_lcmv_sources:
+    input:
+        morphed_contrasts = expand(lcmv_stc_morphed_template, subject_number=subject_numbers, hemisphere=HEMISPHERES)
+    output:
+        averaged_sources = expand(lcmv_stc_averaged_template, hemisphere=HEMISPHERES)
+    run:
+        group_average_stcs(stc_paths=_get_stems(input.morphed_contrasts),
+                           output_path=_get_stem(output.averaged_sources))
 
 
 def _set_matplotlib_defaults():

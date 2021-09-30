@@ -679,6 +679,7 @@ rule morph_dspm:
     run:
         morph = mne.read_source_morph(input.morph_matrix)
         stc = mne.read_source_estimate(input.stc)
+        stc.subject = f'sub-{wildcards.subject_number}'
         morphed = morph.apply(stc)
         morphed.save(output.stc_morphed)
 

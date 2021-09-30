@@ -98,7 +98,9 @@ group_average_evokeds_path = processing_dir / 'ses-meg' / 'meg' / 'ses-meg_task-
 bids_t1_sidecar_template = (bids_dir / 'sub-{subject_number}' / 'ses-mri' / 'anat' /
                             'sub-{subject_number}_ses-mri_acq-mprage_T1w.json')
 bids_t1_template = bids_t1_sidecar_template.with_suffix('.nii.gz')
-freesurfer_t1_template = derivatives_dir / 'freesurfer' / 'sub-{subject_number}' / 'ses-mri' / 'anat' / 'mri' / 'T1.mgz'
+freesurfer_t1_template = freesurfer_dir / 'sub-{subject_number}' / 'ses-mri' / 'anat' / 'mri' / 'T1.mgz'
+freesurfer_lh_reg_template = freesurfer_dir / 'sub-{subject_number}' / 'ses-mri' / 'anat' / 'surf' / 'lh.sphere.reg'
+freesurfer_rh_reg_template = freesurfer_dir / 'sub-{subject_number}' / 'ses-mri' / 'anat' / 'surf' / 'rh.sphere.reg'
 transformation_template = source_modeling_dir / 'sub-{subject_number}' / 'sub-{subject_number}-trans.fif'
 bem_src_template = (derivatives_dir / 'bem' / 'sub-{subject_number}' / 'ses-mri' / 'anat' / 'bem' /
                     f'sub-{{subject_number}}-{SOURCE_SPACE_SPACING}-src.fif')
@@ -646,6 +648,9 @@ SMOOTH = 10
 rule compute_morph_matrix:
     input:
         random_stc = expand(dspm_stc_template, condition=CONDITIONS, allow_missing=True)[0],
+        t1 = freesurfer_t1_template,
+        lh_reg = freesurfer_lh_reg_template,
+        rh_reg = freesurfer_rh_reg_template,
     output:
         morph_matrix = morph_matrix_template
     run:

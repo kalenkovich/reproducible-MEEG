@@ -187,8 +187,10 @@ rule all:
         lcmv_stc = expand(lcmv_stc_template, subject_number=subject_numbers, hemisphere=HEMISPHERES),
         lcmv_stc_morphed = expand(lcmv_stc_morphed_template, subject_number=subject_numbers, hemisphere=HEMISPHERES),
         lcmv_stc_morphed_average = expand(lcmv_stc_averaged_template, hemisphere=HEMISPHERES),
-        erp = plots_dir / 'erp.png',
+        erp_figure = plots_dir / 'erp.png',
         erp_properties = plots_dir / 'erp.json',
+        dspm_figure = plots_dir /'dspm.png',
+        dspm_properties = plots_dir / 'dspm.json',
         manuscript_html = 'report.html'
 
 
@@ -903,6 +905,16 @@ rule plot_erp:
         properties = plots_dir / 'erp.json'
     run:
         plot_erp(input.evokeds, output.png, output.properties)
+
+
+rule plot_dspm:
+    input:
+        dspm = expand(rules.group_average_dspm_sources.output.averaged_sources, condition='contrast')[0]
+    output:
+        png = rules.all.input.dspm_figure,
+        properties = rules.all.input.dspm_properties
+    run:
+        pass
 
 
 rule make_report:

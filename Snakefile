@@ -54,8 +54,9 @@ derivatives_dir = bids_dir / 'derivatives'
 preprocessing_dir = derivatives_dir / '01_preprocessing'
 # TODO: rename both the variable and the directory later
 processing_dir = derivatives_dir / '02_processing'
-source_modeling_dir = derivatives_dir / '03_source_modeling_test'
+source_modeling_dir = derivatives_dir / '03_source_modeling'
 plots_dir = derivatives_dir / '04_plots'
+freesurfer_dir = derivatives_dir / 'freesurfer'
 
 openneuro_maxfiltered_dir = derivatives_dir / 'meg_derivatives'
 
@@ -649,9 +650,15 @@ rule compute_morph_matrix:
         morph_matrix = morph_matrix_template
     run:
         stc = mne.read_source_estimate(input.random_stc)
+        subject_from = f'sub-{wildcards.subject_number}/ses-mri/anat'
+        subject_to = 'fsaverage/ses-mri/anat'
+        morph_map_dir = freesurfer_dir / 'morph-maps' / f'{subject_to}-{subject_from}'
+        morph_map_dir.mkdir(parents=True, exist_ok=True)
+        stc.subject = subject_from
         morph = mne.compute_source_morph(
+            subject_from=subject_from,
             src=stc,
-            subject_to='fsaverage',
+            subject_to=subject_to,
             subjects_dir=freesurfer_dir,
             smooth=SMOOTH)
         morph.save(output.morph_matrix)

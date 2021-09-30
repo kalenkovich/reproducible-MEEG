@@ -666,6 +666,7 @@ rule compute_morph_matrix:
             subject_to=subject_to,
             subjects_dir=freesurfer_dir,
             smooth=SMOOTH)
+        morph.subject_from = f'sub-{wildcards.subject_number}'
         morph.save(output.morph_matrix)
 
 

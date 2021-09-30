@@ -712,8 +712,7 @@ def group_average_stcs(stc_paths, output_path):
     data = np.average([s.data for s in stcs],axis=0)
     random_stc = stcs[0]
     StcClass = type(random_stc)
-    stc = StcClass(data,random_stc.vertices,
-        random_stc.tmin,random_stc.tstep,random_stc.subject)
+    stc = StcClass(data, random_stc.vertices, random_stc.tmin, random_stc.tstep, random_stc.subject)
     stc.save(output_path)
 
 

@@ -78,7 +78,7 @@ bad_channels_template = (preprocessing_dir / 'sub-{subject_number}' / 'ses-meg' 
 concatenated_raw_template = (preprocessing_dir / 'sub-{subject_number}' / 'ses-meg' / 'meg' /
                              'sub-{subject_number}_ses-meg_task-facerecognition_proc-sss_concatenated_meg.fif')
 concatenated_events_template = (preprocessing_dir / 'sub-{subject_number}' / 'ses-meg' / 'meg' /
-                                'sub-{subject_number}_ses-meg_task-facerecognition_proc-sss_eventsConcatenated.fif')
+                                'sub-{subject_number}_ses-meg_task-facerecognition_proc-sss_concatenated-eve.fif')
 epoched_template = (preprocessing_dir / 'sub-{subject_number}' / 'ses-meg' / 'meg' /
                          'sub-{subject_number}_ses-meg_task-facerecognition_epo.fif')
 ecg_epochs_template = (preprocessing_dir / 'sub-{subject_number}' / 'ses-meg' / 'meg' /

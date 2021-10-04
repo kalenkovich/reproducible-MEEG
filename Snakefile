@@ -582,11 +582,39 @@ rule estimate_transformation_matrix:
         trans.save(output.trans)
 
 
+# Mapping openneuro subject codes to the openfmri ones. See section "RELATIONSHIP OF SUBJECT NUMBERING RELATIVE TO OTHER
+# VERSIONS OF DATASET" at https://openneuro.org/datasets/ds000117/versions/1.0.4
+subject_code_map = {
+    'sub002': 'sub-01',
+    'sub003': 'sub-02',
+    'sub004': 'sub-03',
+    'sub011': 'sub-04',
+    'sub006': 'sub-05',
+    'sub007': 'sub-06',
+    'sub008': 'sub-07',
+    'sub009': 'sub-08',
+    'sub010': 'sub-09',
+    'sub012': 'sub-10',
+    'sub013': 'sub-11',
+    'sub014': 'sub-12',
+    'sub015': 'sub-13',
+    'sub017': 'sub-14',
+    'sub018': 'sub-15',
+    'sub019': 'sub-16'
+}
+
+
 def make_forward_model(evoked_path, trans_path, src_path, bem_path, forward_model_path):
     info = mne.io.read_info(evoked_path)
     # Because we use a 1-layer BEM, we do MEG only
     fwd = mne.make_forward_solution(info, trans_path, src_path, bem_path,
                                     meg=True, eeg=False, mindist=MINDIST)
+
+    # We ran FreeSurfer on the OpenfMRI version of the data which has different subject codes than openneuro does. Here,
+    # we change the codes to the openneuro codes for consistency with all the other files.
+    for src_ in fwd['src']:
+        src_['subject_his_id'] = subject_code_map[src_['subject_his_id']]
+
     mne.write_forward_solution(forward_model_path, fwd, overwrite=True)
 
 
@@ -660,8 +688,8 @@ rule compute_morph_matrix:
         subject_to = str(Path('fsaverage/ses-mri/anat'))
         # mne saves a morphing map to <freesurfer_dir>/morph-maps/<sub-to>-<sub-from>-morph.fif
         # Due to the additional folders in the subject names, this becomes
-        # <sub-/ses-mri/anat-sub-01/ses-mri/anat-morph.fif
-        # It still wokrs but we need to create the folder fot this file.
+        # <sub-to>/ses-mri/anat-<sub-from>/ses-mri/anat-morph.fif
+        # It still works but we need to create the folder fot this file.
         morph_path = (freesurfer_dir.joinpath('morph-maps').joinpath(f'{subject_to}-{subject_from}')
                       .with_name('anat-morph.fif'))
         morph_path.parent.mkdir(parents=True, exist_ok=True)
@@ -691,7 +719,6 @@ rule morph_dspm:
     run:
         morph = mne.read_source_morph(input.morph_matrix)
         stc = mne.read_source_estimate(input.stc)
-        stc.subject = f'sub-{wildcards.subject_number}'
         morphed = morph.apply(stc)
         morphed.save(output.stc_morphed)
 

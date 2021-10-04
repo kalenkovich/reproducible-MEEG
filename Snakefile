@@ -43,36 +43,7 @@ REJECT_TMAX = 0.8  # duration we really care about
 MINDIST = 5
 # Spacing of the source space used in the forward model
 SOURCE_SPACE_SPACING = 'oct6'
-
-# Mapping openneuro subject codes to the openfmri ones. See section "RELATIONSHIP OF SUBJECT NUMBERING RELATIVE TO OTHER
-# VERSIONS OF DATASET" at https://openneuro.org/datasets/ds000117/versions/1.0.4
-OPENNEURO_TO_OPENFMRI_SUBJECT_NUMBER = {
-    '01': '002',
-    '02': '003',
-    '03': '004',
-    '04': '011',
-    '05': '006',
-    '06': '007',
-    '07': '008',
-    '08': '009',
-    '09': '010',
-    '10': '012',
-    '11': '013',
-    '12': '014',
-    '13': '015',
-    '14': '017',
-    '15': '018',
-    '16': '019'
-}
-
-
 CONDITIONS = ['scrambled', 'unfamiliar', 'famous', 'faces', 'contrast', 'faces_eq', 'scrambled_eq']
-
-
-def openfmri_input(openneuro_subject_number, openfmri_template):
-    openfmri_subject_number = OPENNEURO_TO_OPENFMRI_SUBJECT_NUMBER[openneuro_subject_number]
-    return str(openfmri_template).format(openfmri_subject_number=openfmri_subject_number)
-
 
 
 # Folders
@@ -85,9 +56,11 @@ preprocessing_dir = derivatives_dir / '01_preprocessing'
 processing_dir = derivatives_dir / '02_processing'
 source_modeling_dir = derivatives_dir / '03_source_modeling'
 plots_dir = derivatives_dir / '04_plots'
+# This is the folder with *our* freesurfer outputs, not the one from openneuro
+freesurfer_dir = derivatives_dir / 'freesurfer_lk'
 
 openneuro_maxfiltered_dir = derivatives_dir / 'meg_derivatives'
-freesurfer_dir = data_dir / 'reconned'
+
 
 # Templates
 run_template = (openneuro_maxfiltered_dir / 'sub-{subject_number}' / 'ses-meg' / 'meg' /
@@ -126,12 +99,14 @@ group_average_evokeds_path = processing_dir / 'ses-meg' / 'meg' / 'ses-meg_task-
 bids_t1_sidecar_template = (bids_dir / 'sub-{subject_number}' / 'ses-mri' / 'anat' /
                             'sub-{subject_number}_ses-mri_acq-mprage_T1w.json')
 bids_t1_template = bids_t1_sidecar_template.with_suffix('.nii.gz')
-freesurfer_t1_template = freesurfer_dir / 'sub{openfmri_subject_number}' / 'mri' / 'T1.mgz'
+freesurfer_t1_template = freesurfer_dir / 'sub-{subject_number}' / 'ses-mri' / 'anat' / 'mri' / 'T1.mgz'
+freesurfer_lh_reg_template = freesurfer_dir / 'sub-{subject_number}' / 'ses-mri' / 'anat' / 'surf' / 'lh.sphere.reg'
+freesurfer_rh_reg_template = freesurfer_dir / 'sub-{subject_number}' / 'ses-mri' / 'anat' / 'surf' / 'rh.sphere.reg'
 transformation_template = source_modeling_dir / 'sub-{subject_number}' / 'sub-{subject_number}-trans.fif'
-bem_src_template = (freesurfer_dir / 'sub{openfmri_subject_number}' / 'bem' /
-                f'sub{{openfmri_subject_number}}-{SOURCE_SPACE_SPACING}-src.fif')
-bem_sol_template = (freesurfer_dir / 'sub{openfmri_subject_number}' / 'bem' /
-                    'sub{openfmri_subject_number}-5120-bem-sol.fif')
+bem_src_template = (freesurfer_dir / 'sub-{subject_number}' / 'ses-mri' / 'anat' / 'bem' /
+                    f'sub-{{subject_number}}-{SOURCE_SPACE_SPACING}-src.fif')
+bem_sol_template = (freesurfer_dir / 'sub-{subject_number}' / 'ses-mri' / 'anat' / 'bem' /
+                    'sub-{subject_number}-5120-bem-sol.fif')
 forward_model_template = (source_modeling_dir / 'sub-{subject_number}' /
                           f'sub-{{subject_number}}_spacing-{SOURCE_SPACE_SPACING}-fwd.fif')
 inverse_model_template = (source_modeling_dir / 'sub-{subject_number}' /
@@ -280,9 +255,8 @@ rule apply_linear_filter:
 dir_separator = re.escape(str(Path('/')))
 file_in_subject_folder = fr'sub-\d+{dir_separator}.*'
 maxfiltered_file = fr'derivatives{dir_separator}meg_derivatives{dir_separator}.*'
-freesurfer_file = fr'derivatives{dir_separator}freesurfer{dir_separator}.*'
 
-openneuro_filepath_regex = fr'({file_in_subject_folder}|{maxfiltered_file}|{freesurfer_file})'
+openneuro_filepath_regex = fr'({file_in_subject_folder}|{maxfiltered_file})'
 
 
 rule download_from_openneuro:
@@ -599,7 +573,7 @@ rule estimate_transformation_matrix:
         run01 = expand(run_template, run_id='01', allow_missing=True)[0],
         bids_t1 = bids_t1_template,
         bids_t1_sidecar = bids_t1_sidecar_template,
-        freesurfer_t1 = lambda wildcards: openfmri_input(wildcards.subject_number, freesurfer_t1_template)
+        freesurfer_t1 = freesurfer_t1_template
     output:
         trans = transformation_template
     run:
@@ -608,25 +582,48 @@ rule estimate_transformation_matrix:
         trans.save(output.trans)
 
 
+# Mapping openneuro subject codes to the openfmri ones. See section "RELATIONSHIP OF SUBJECT NUMBERING RELATIVE TO OTHER
+# VERSIONS OF DATASET" at https://openneuro.org/datasets/ds000117/versions/1.0.4
+subject_code_map = {
+    'sub002': 'sub-01',
+    'sub003': 'sub-02',
+    'sub004': 'sub-03',
+    'sub011': 'sub-04',
+    'sub006': 'sub-05',
+    'sub007': 'sub-06',
+    'sub008': 'sub-07',
+    'sub009': 'sub-08',
+    'sub010': 'sub-09',
+    'sub012': 'sub-10',
+    'sub013': 'sub-11',
+    'sub014': 'sub-12',
+    'sub015': 'sub-13',
+    'sub017': 'sub-14',
+    'sub018': 'sub-15',
+    'sub019': 'sub-16'
+}
+
+
 def make_forward_model(evoked_path, trans_path, src_path, bem_path, forward_model_path):
     info = mne.io.read_info(evoked_path)
     # Because we use a 1-layer BEM, we do MEG only
     fwd = mne.make_forward_solution(info, trans_path, src_path, bem_path,
                                     meg=True, eeg=False, mindist=MINDIST)
+
+    # We ran FreeSurfer on the OpenfMRI version of the data which has different subject codes than openneuro does. Here,
+    # we change the codes to the openneuro codes for consistency with all the other files.
+    for src_ in fwd['src']:
+        src_['subject_his_id'] = subject_code_map[src_['subject_his_id']]
+
     mne.write_forward_solution(forward_model_path, fwd, overwrite=True)
-
-
-def freesurfer_inputs(wildcards):
-    openfmri_subject_number = OPENNEURO_TO_OPENFMRI_SUBJECT_NUMBER[wildcards.subject_number]
-    return str(freesurfer_t1_template).format(openfmri_subject_number=openfmri_subject_number)
 
 
 rule run_forward:
     input:
         evoked = evoked_template,
         transformation = transformation_template,
-        src = lambda wildcards: openfmri_input(wildcards.subject_number, bem_src_template),
-        bem = lambda wildcards: openfmri_input(wildcards.subject_number, bem_sol_template)
+        src = bem_src_template,
+        bem = bem_sol_template
     output:
         forward_model = forward_model_template
     run:
@@ -679,15 +676,37 @@ SMOOTH = 10
 rule compute_morph_matrix:
     input:
         random_stc = expand(dspm_stc_template, condition=CONDITIONS, allow_missing=True)[0],
+        t1 = freesurfer_t1_template,
+        lh_reg = freesurfer_lh_reg_template,
+        rh_reg = freesurfer_rh_reg_template,
     output:
         morph_matrix = morph_matrix_template
     run:
+        # mne expects freesurfer output folder to have the fressurfer layout, not the bids-like one which is two levels
+        # deeper. Here, we trick mne by including the additional "ses-mri/anat/" folders into the subject "names".
+        subject_from = str(Path(f'sub-{wildcards.subject_number}/ses-mri/anat'))
+        subject_to = str(Path('fsaverage/ses-mri/anat'))
+        # mne saves a morphing map to <freesurfer_dir>/morph-maps/<sub-to>-<sub-from>-morph.fif
+        # Due to the additional folders in the subject names, this becomes
+        # <sub-to>/ses-mri/anat-<sub-from>/ses-mri/anat-morph.fif
+        # It still works but we need to create the folder fot this file.
+        morph_path = (freesurfer_dir.joinpath('morph-maps').joinpath(f'{subject_to}-{subject_from}')
+                      .with_name('anat-morph.fif'))
+        morph_path.parent.mkdir(parents=True, exist_ok=True)
+
         stc = mne.read_source_estimate(input.random_stc)
+        stc.subject = subject_from
+
         morph = mne.compute_source_morph(
+            subject_from=subject_from,
             src=stc,
-            subject_to='fsaverage',
+            subject_to=subject_to,
             subjects_dir=freesurfer_dir,
             smooth=SMOOTH)
+
+        # Restore the original subject code
+        morph.subject_from = f'sub-{wildcards.subject_number}'
+
         morph.save(output.morph_matrix)
 
 

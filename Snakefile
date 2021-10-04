@@ -56,7 +56,8 @@ preprocessing_dir = derivatives_dir / '01_preprocessing'
 processing_dir = derivatives_dir / '02_processing'
 source_modeling_dir = derivatives_dir / '03_source_modeling'
 plots_dir = derivatives_dir / '04_plots'
-freesurfer_dir = derivatives_dir / 'freesurfer'
+# This is the folder with *our* freesurfer outputs, not the one from openneuro
+freesurfer_dir = derivatives_dir / 'freesurfer_lk'
 
 openneuro_maxfiltered_dir = derivatives_dir / 'meg_derivatives'
 
@@ -102,9 +103,9 @@ freesurfer_t1_template = freesurfer_dir / 'sub-{subject_number}' / 'ses-mri' / '
 freesurfer_lh_reg_template = freesurfer_dir / 'sub-{subject_number}' / 'ses-mri' / 'anat' / 'surf' / 'lh.sphere.reg'
 freesurfer_rh_reg_template = freesurfer_dir / 'sub-{subject_number}' / 'ses-mri' / 'anat' / 'surf' / 'rh.sphere.reg'
 transformation_template = source_modeling_dir / 'sub-{subject_number}' / 'sub-{subject_number}-trans.fif'
-bem_src_template = (derivatives_dir / 'bem' / 'sub-{subject_number}' / 'ses-mri' / 'anat' / 'bem' /
+bem_src_template = (freesurfer_dir / 'sub-{subject_number}' / 'ses-mri' / 'anat' / 'bem' /
                     f'sub-{{subject_number}}-{SOURCE_SPACE_SPACING}-src.fif')
-bem_sol_template = (derivatives_dir / 'bem' / 'sub-{subject_number}' / 'ses-mri' / 'anat' / 'bem' /
+bem_sol_template = (freesurfer_dir / 'sub-{subject_number}' / 'ses-mri' / 'anat' / 'bem' /
                     'sub-{subject_number}-5120-bem-sol.fif')
 forward_model_template = (source_modeling_dir / 'sub-{subject_number}' /
                           f'sub-{{subject_number}}_spacing-{SOURCE_SPACE_SPACING}-fwd.fif')
@@ -254,9 +255,8 @@ rule apply_linear_filter:
 dir_separator = re.escape(str(Path('/')))
 file_in_subject_folder = fr'sub-\d+{dir_separator}.*'
 maxfiltered_file = fr'derivatives{dir_separator}meg_derivatives{dir_separator}.*'
-freesurfer_file = fr'derivatives{dir_separator}freesurfer{dir_separator}.*'
 
-openneuro_filepath_regex = fr'({file_in_subject_folder}|{maxfiltered_file}|{freesurfer_file})'
+openneuro_filepath_regex = fr'({file_in_subject_folder}|{maxfiltered_file})'
 
 
 rule download_from_openneuro:

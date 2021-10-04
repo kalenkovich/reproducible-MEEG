@@ -654,19 +654,31 @@ rule compute_morph_matrix:
     output:
         morph_matrix = morph_matrix_template
     run:
+        # mne expects freesurfer output folder to have the fressurfer layout, not the bids-like one which is two levels
+        # deeper. Here, we trick mne by including the additional "ses-mri/anat/" folders into the subject "names".
+        subject_from = str(Path(f'sub-{wildcards.subject_number}/ses-mri/anat'))
+        subject_to = str(Path('fsaverage/ses-mri/anat'))
+        # mne saves a morphing map to <freesurfer_dir>/morph-maps/<sub-to>-<sub-from>-morph.fif
+        # Due to the additional folders in the subject names, this becomes
+        # <sub-/ses-mri/anat-sub-01/ses-mri/anat-morph.fif
+        # It still wokrs but we need to create the folder fot this file.
+        morph_path = (freesurfer_dir.joinpath('morph-maps').joinpath(f'{subject_to}-{subject_from}')
+                      .with_name('anat-morph.fif'))
+        morph_path.parent.mkdir(parents=True, exist_ok=True)
+
         stc = mne.read_source_estimate(input.random_stc)
-        subject_from = f'sub-{wildcards.subject_number}/ses-mri/anat'
-        subject_to = 'fsaverage/ses-mri/anat'
-        morph_map_dir = freesurfer_dir / 'morph-maps' / f'{subject_to}-{subject_from}'
-        morph_map_dir.mkdir(parents=True, exist_ok=True)
         stc.subject = subject_from
+
         morph = mne.compute_source_morph(
             subject_from=subject_from,
             src=stc,
             subject_to=subject_to,
             subjects_dir=freesurfer_dir,
             smooth=SMOOTH)
+
+        # Restore the original subject code
         morph.subject_from = f'sub-{wildcards.subject_number}'
+
         morph.save(output.morph_matrix)
 
 

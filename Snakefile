@@ -47,7 +47,7 @@ CONDITIONS = ['scrambled', 'unfamiliar', 'famous', 'faces', 'contrast', 'faces_e
 
 
 # Folders
-data_dir = Path(os.environ['reproduction-data'])
+data_dir = Path(os.environ['reproduction_data'])
 downloads_dir = data_dir / 'downloads'
 bids_dir = data_dir / 'bids'
 derivatives_dir = bids_dir / 'derivatives'
@@ -68,34 +68,34 @@ run_template = (openneuro_maxfiltered_dir / 'sub-{subject_number}' / 'ses-meg' /
 events_template = (bids_dir / 'sub-{subject_number}' / 'ses-meg' / 'meg' /
                 'sub-{subject_number}_ses-meg_task-facerecognition_run-{run_id}_events.tsv')
 filtered_template = (preprocessing_dir / 'sub-{subject_number}' / 'ses-meg' / 'meg' /
-                     'sub-{subject_number}_ses-meg_task-facerecognition_run-{run_id}_filteredHighPass{l_freq}.fif')
+                     'sub-{subject_number}_ses-meg_task-facerecognition_run-{run_id}_filteredHighPass{l_freq}_meg.fif')
 ica_template = (preprocessing_dir / 'sub-{subject_number}' / 'ses-meg' / 'meg' /
-                'sub-{subject_number}_ses-meg_task-facerecognition_filtered.fif')
+                'sub-{subject_number}_ses-meg_task-facerecognition_ica.fif')
 maxfilter_log_template = (openneuro_maxfiltered_dir / 'sub-{subject_number}' / 'ses-meg' / 'meg' /
                           'sub-{subject_number}_ses-meg_task-facerecognition_run-{run_id}_proc-sss_log.txt')
 bad_channels_template = (preprocessing_dir / 'sub-{subject_number}' / 'ses-meg' / 'meg' /
                          'sub-{subject_number}_ses-meg_task-facerecognition_run-{run_id}_bads.fif')
 concatenated_raw_template = (preprocessing_dir / 'sub-{subject_number}' / 'ses-meg' / 'meg' /
-                             'sub-{subject_number}_ses-meg_task-facerecognition_proc-sss_megConcatenated.fif')
+                             'sub-{subject_number}_ses-meg_task-facerecognition_proc-sss_concatenated_meg.fif')
 concatenated_events_template = (preprocessing_dir / 'sub-{subject_number}' / 'ses-meg' / 'meg' /
-                                'sub-{subject_number}_ses-meg_task-facerecognition_proc-sss_eventsConcatenated.fif')
+                                'sub-{subject_number}_ses-meg_task-facerecognition_proc-sss_concatenated-eve.fif')
 epoched_template = (preprocessing_dir / 'sub-{subject_number}' / 'ses-meg' / 'meg' /
                          'sub-{subject_number}_ses-meg_task-facerecognition_epo.fif')
 ecg_epochs_template = (preprocessing_dir / 'sub-{subject_number}' / 'ses-meg' / 'meg' /
-                       'sub-{subject_number}_ses-meg_task-facerecognition_ecgEpochs.fif')
+                       'sub-{subject_number}_ses-meg_task-facerecognition_ecg_epo.fif')
 eog_epochs_template = (preprocessing_dir / 'sub-{subject_number}' / 'ses-meg' / 'meg' /
-                       'sub-{subject_number}_ses-meg_task-facerecognition_eogEpochs.fif')
+                       'sub-{subject_number}_ses-meg_task-facerecognition_eog_epo.fif')
 artifact_components_template = (preprocessing_dir / 'sub-{subject_number}' / 'ses-meg' / 'meg' /
                        'sub-{subject_number}_ses-meg_task-facerecognition_artifactComponents.npz')
 epochs_cleaned_template = (preprocessing_dir / 'sub-{subject_number}' / 'ses-meg' / 'meg' /
-                           'sub-{subject_number}_ses-meg_task-facerecognition_epoCleaned.fif')
+                           'sub-{subject_number}_ses-meg_task-facerecognition_cleaned_epo.fif')
 evoked_template = (processing_dir / 'sub-{subject_number}' / 'ses-meg' / 'meg' /
-                   'sub-{subject_number}_ses-meg_task-facerecognition_evo.fif')
+                   'sub-{subject_number}_ses-meg_task-facerecognition_ave.fif')
 covariance_template = (processing_dir / 'sub-{subject_number}' / 'ses-meg' / 'meg' /
                        'sub-{subject_number}_ses-meg_task-facerecognition_cov.fif')
 tfr_template = (processing_dir / 'sub-{subject_number}' / 'ses-meg' / 'meg' /
                 'sub-{subject_number}_ses-meg_task-facerecognition_{measure}-{condition}.fif')
-group_average_evokeds_path = processing_dir / 'ses-meg' / 'meg' / 'ses-meg_task-facerecognition_evo-ave.fif'
+group_average_evokeds_path = processing_dir / 'ses-meg' / 'meg' / 'ses-meg_task-facerecognition_grand-ave.fif'
 bids_t1_sidecar_template = (bids_dir / 'sub-{subject_number}' / 'ses-mri' / 'anat' /
                             'sub-{subject_number}_ses-mri_acq-mprage_T1w.json')
 bids_t1_template = bids_t1_sidecar_template.with_suffix('.nii.gz')

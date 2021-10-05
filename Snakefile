@@ -214,6 +214,9 @@ rule apply_linear_filter:
         run = run_template
     output:
         filtered = filtered_template
+    # Used to avoid parallelization in case of issues. See "Troubleshooting" in README.md
+    resources:
+        filtering_process = workflow.cores
     run:
         l_freq = None if wildcards.l_freq == 'None' else float(wildcards.l_freq)
         linear_filter(input.run, output.filtered, l_freq)
@@ -360,6 +363,9 @@ rule make_artifact_epochs:
     output:
         ecg = ecg_epochs_template,
         eog = eog_epochs_template
+    # Used to avoid parallelization in case of issues. See "Troubleshooting" in README.md
+    resources:
+        filtering_process = workflow.cores
     run:
         raw = mne.io.read_raw(input.concatenated_raw)
 

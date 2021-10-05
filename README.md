@@ -36,3 +36,19 @@ There are two workaround:
    snakemake --until download_from_openneuro --cores <n_cores> --restart-times 5
    ```
    Once done, run the full workflow again (the downloaded files will not be downloaded again).
+
+
+## Rules `apply_linear_filter` or `make_artifact_epochs`
+
+These rules run linear filtering at some point which may create issues when another job is running at the same time.
+In Snakefile, we told Snakemake that if the `filtering_process` resource is set during Snakemake invocation, then those
+two rules will require as much of this resource as there are cores available and thus these rules can't be run in
+parallel with each other job (see `resources` nodes of these rules).
+This setting does not change anything unless we run Snakemake with the `--resources` flag and set `filtering_process`
+resource capacity to the total number of cores.
+To avoid these rules running in parallel with other rules we also set the default amount of this resource to `1` for all
+the rules that do not have this resource specified with the `default-resources` flag.
+
+```sh
+snakemake --cores <n_cores> --resources filtering_process=<n_cores> --default-resources filtering_process=1 --keep-going
+```

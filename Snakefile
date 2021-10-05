@@ -189,7 +189,8 @@ rule all:
         lcmv_stc_morphed_average = expand(lcmv_stc_averaged_template, hemisphere=HEMISPHERES),
         erp_figure = plots_dir / 'erp.png',
         erp_properties = plots_dir / 'erp.json',
-        dspm_figure = plots_dir /'dspm.png',
+        dspm_figure = plots_dir / 'dspm.png',
+        lcmv_figure = plots_dir / 'lcmv.png',
         manuscript_html = 'report.html'
 
 
@@ -931,6 +932,15 @@ rule plot_dspm:
         png = rules.all.input.dspm_figure
     run:
         plot_dspm(dspm_path=input.dspm, png_path=output.png)
+
+
+rule plot_lcmv:
+    input:
+        lcmv = expand(rules.group_average_lcmv_sources.output.averaged_sources, hemisphere=HEMISPHERES)
+    output:
+        png = rules.all.input.lcmv_figure
+    run:
+        pass
 
 
 rule make_report:

@@ -4,6 +4,8 @@ output: html_document
 params:
   erp: ""
   erp_properties: ""
+  dspm: ""
+  lcmv: ""
 ---
 
 # ERP
@@ -25,4 +27,12 @@ erp.caption <- sprintf(paste0(
 
 ```{r fig.cap = erp.caption, echo = FALSE}
 knitr::include_graphics(params$erp)
+```
+
+```{r fig.cap = "Group-averaged source estimates obtained using the dSPM method.", echo = FALSE}
+knitr::include_graphics(params$dspm)
+```
+
+```{r fig.cap = "Group-averaged source estimates obtained using the dSPM method.", echo = FALSE}
+knitr::include_graphics(params$lcmv)
 ```

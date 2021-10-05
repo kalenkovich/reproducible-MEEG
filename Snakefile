@@ -49,7 +49,7 @@ CONDITIONS = ['scrambled', 'unfamiliar', 'famous', 'faces', 'contrast', 'faces_e
 # Folders
 data_dir = Path(os.environ['reproduction_data'])
 downloads_dir = data_dir / 'downloads'
-bids_dir = data_dir / 'bids'
+bids_dir = (data_dir / 'bids')
 derivatives_dir = bids_dir / 'derivatives'
 preprocessing_dir = derivatives_dir / '01_preprocessing'
 # TODO: rename both the variable and the directory later
@@ -874,8 +874,8 @@ rule plot_erp:
     input:
         evokeds = rules.group_average_evokeds.output.averaged_evokeds
     output:
-        png = plots_dir / 'erp.png',
-        properties = plots_dir / 'erp.json'
+        png = Path(plots_dir / 'erp.png').as_posix(),
+        properties = Path(plots_dir / 'erp.json').as_posix()
     run:
         plot_erp(input.evokeds, output.png, output.properties)
 
@@ -901,7 +901,7 @@ rule plot_dspm:
     input:
         dspm = expand(rules.group_average_dspm_sources.output.averaged_sources, condition='contrast')[0]
     output:
-        png = plots_dir / 'dspm.png'
+        png = Path(plots_dir / 'dspm.png').as_posix()
     run:
         plot_dspm(dspm_path=input.dspm, png_path=output.png)
 
@@ -927,7 +927,7 @@ rule plot_lcmv:
     input:
         lcmv = expand(rules.group_average_lcmv_sources.output.averaged_sources, hemisphere=HEMISPHERES)
     output:
-        png = plots_dir / 'lcmv.png'
+        png = Path(plots_dir / 'lcmv.png').as_posix()
     run:
         plot_lcmv(lcmv_path=input.lcmv, png_path=output.png)
 

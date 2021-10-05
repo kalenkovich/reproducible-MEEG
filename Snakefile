@@ -706,8 +706,9 @@ rule compute_morph_matrix:
             subjects_dir=freesurfer_dir,
             smooth=SMOOTH)
 
-        # Restore the original subject code
+        # Restore the original subject names
         morph.subject_from = f'sub-{wildcards.subject_number}'
+        morph.subject_to = 'fsaverage'
 
         morph.save(output.morph_matrix)
 

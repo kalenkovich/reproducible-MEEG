@@ -190,7 +190,6 @@ rule all:
         erp_figure = plots_dir / 'erp.png',
         erp_properties = plots_dir / 'erp.json',
         dspm_figure = plots_dir /'dspm.png',
-        dspm_properties = plots_dir / 'dspm.json',
         manuscript_html = 'report.html'
 
 
@@ -908,14 +907,30 @@ rule plot_erp:
         plot_erp(input.evokeds, output.png, output.properties)
 
 
+def plot_dspm(dspm_path, png_path):
+    stc : mne.SourceEstimate = mne.read_source_estimate(dspm_path, subject='fsaverage').magnitude()
+    lims = (1, 3, 5)  # if l_freq is None else (0.5, 1.5, 2.5)
+    stc.subject = str(Path('fsaverage/ses-mri/anat'))
+    brain_dspm = stc.plot(
+        views='ven',
+        hemi='both', 
+		backend='pyvista',
+        brain_kwargs=dict(show=False),
+        subjects_dir=freesurfer_dir,
+        initial_time=0.17, time_unit='s', background='w', figure=1,
+        clim=dict(kind='value',lims=lims), foreground='k', time_viewer=False)
+
+    brain_dspm.save_image(png_path)
+    brain_dspm.close()
+
+
 rule plot_dspm:
     input:
         dspm = expand(rules.group_average_dspm_sources.output.averaged_sources, condition='contrast')[0]
     output:
-        png = rules.all.input.dspm_figure,
-        properties = rules.all.input.dspm_properties
+        png = rules.all.input.dspm_figure
     run:
-        pass
+        plot_dspm(dspm_path=input.dspm, png_path=output.png)
 
 
 rule make_report:

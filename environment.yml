@@ -4,7 +4,7 @@ channels:
   - conda-forge
   - bioconda
 dependencies:
-  - python=3.9.4
+  - python=3.7.11
   - bioconda::snakemake-minimal=6.2.1
   # Otherwise, snakemake throws an error (see https://git.io/JRckv)
   - conda-forge::smart_open=3

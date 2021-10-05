@@ -1,0 +1,2 @@
+conda activate <env-w-osfclient-installed>
+osf -p jy2g7 upload -r freesurfer_lk/ .

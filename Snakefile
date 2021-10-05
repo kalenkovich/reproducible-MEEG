@@ -934,13 +934,30 @@ rule plot_dspm:
         plot_dspm(dspm_path=input.dspm, png_path=output.png)
 
 
+def plot_lcmv(lcmv_path, png_path):
+    stc = mne.read_source_estimate(_get_stem(lcmv_path), subject='fsaverage')
+    lims = (0.015, 0.03, 0.045)  # if l_freq is None else (0.01, 0.02, 0.03)
+    stc.subject = str(Path('fsaverage/ses-mri/anat'))
+    brain_lcmv = stc.plot(
+        views='ven',
+        hemi='both', 
+		backend='pyvista',
+        brain_kwargs=dict(show=False),
+        subjects_dir=freesurfer_dir,
+        initial_time=0.17, time_unit='s', background='w', figure=2,
+        clim=dict(kind='value',lims=lims), foreground='k', time_viewer=False)
+
+    brain_lcmv.save_image(png_path)
+    brain_lcmv.close()
+
+
 rule plot_lcmv:
     input:
         lcmv = expand(rules.group_average_lcmv_sources.output.averaged_sources, hemisphere=HEMISPHERES)
     output:
         png = rules.all.input.lcmv_figure
     run:
-        pass
+        plot_lcmv(lcmv_path=input.lcmv, png_path=output.png)
 
 
 rule make_report:

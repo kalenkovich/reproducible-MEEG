@@ -49,7 +49,7 @@ CONDITIONS = ['scrambled', 'unfamiliar', 'famous', 'faces', 'contrast', 'faces_e
 # Folders
 data_dir = Path(os.environ['reproduction_data'])
 downloads_dir = data_dir / 'downloads'
-bids_dir = data_dir / 'bids'
+bids_dir = (data_dir / 'bids')
 derivatives_dir = bids_dir / 'derivatives'
 preprocessing_dir = derivatives_dir / '01_preprocessing'
 # TODO: rename both the variable and the directory later
@@ -163,34 +163,6 @@ HEMISPHERES = ['lh', 'rh']
 
 rule all:
     input:
-        events = expand(events_template, subject_number=subject_numbers, run_id=run_ids),
-        filtered = expand(filtered_template, subject_number=subject_numbers, run_id=run_ids, l_freq=L_FREQS),
-        icas = expand(ica_template, subject_number=subject_numbers),
-        bad_channels = expand(bad_channels_template, subject_number=subject_numbers, run_id=run_ids),
-        epoched = expand(epoched_template, subject_number=subject_numbers),
-        ecg_epochs = expand(ecg_epochs_template, subject_number=subject_numbers),
-        eog_epochs = expand(eog_epochs_template, subject_number=subject_numbers),
-        artifact_components = expand(artifact_components_template, subject_number=subject_numbers),
-        clean_epochs = expand(epochs_cleaned_template, subject_number=subject_numbers),
-        evoked = expand(evoked_template, subject_number=subject_numbers),
-        prestimulus_covariance = expand(covariance_template, subject_number=subject_numbers),
-        tfr = expand(tfr_template, subject_number=subject_numbers, measure=('itc', 'power'),
-                     condition=('face', 'scrambled')),
-        group_average_evokeds = group_average_evokeds_path,
-        # TODO: run for all subjects once we have run FreeSurfer on all of them
-        transformation = expand(transformation_template, subject_number=subject_numbers),
-        forward_model = expand(forward_model_template, subject_number=subject_numbers),
-        inverse_model= expand(inverse_model_template, subject_number=subject_numbers),
-        dspm_stc = expand(dspm_stc_template, subject_number=subject_numbers, condition=CONDITIONS),
-        dspm_stc_morphed = expand(dspm_stc_morphed_template, subject_number=subject_numbers, condition=CONDITIONS),
-        dspm_stc_morphed_average = expand(dspm_stc_averaged_template, condition='contrast')[0],
-        lcmv_stc = expand(lcmv_stc_template, subject_number=subject_numbers, hemisphere=HEMISPHERES),
-        lcmv_stc_morphed = expand(lcmv_stc_morphed_template, subject_number=subject_numbers, hemisphere=HEMISPHERES),
-        lcmv_stc_morphed_average = expand(lcmv_stc_averaged_template, hemisphere=HEMISPHERES),
-        erp_figure = plots_dir / 'erp.png',
-        erp_properties = plots_dir / 'erp.json',
-        dspm_figure = plots_dir / 'dspm.png',
-        lcmv_figure = plots_dir / 'lcmv.png',
         manuscript_html = 'report.html'
 
 
@@ -242,6 +214,9 @@ rule apply_linear_filter:
         run = run_template
     output:
         filtered = filtered_template
+    # Used to avoid parallelization in case of issues. See "Troubleshooting" in README.md
+    resources:
+        filtering_process = workflow.cores
     run:
         l_freq = None if wildcards.l_freq == 'None' else float(wildcards.l_freq)
         linear_filter(input.run, output.filtered, l_freq)
@@ -388,6 +363,9 @@ rule make_artifact_epochs:
     output:
         ecg = ecg_epochs_template,
         eog = eog_epochs_template
+    # Used to avoid parallelization in case of issues. See "Troubleshooting" in README.md
+    resources:
+        filtering_process = workflow.cores
     run:
         raw = mne.io.read_raw(input.concatenated_raw)
 
@@ -902,8 +880,8 @@ rule plot_erp:
     input:
         evokeds = rules.group_average_evokeds.output.averaged_evokeds
     output:
-        png = plots_dir / 'erp.png',
-        properties = plots_dir / 'erp.json'
+        png = Path(plots_dir / 'erp.png').as_posix(),
+        properties = Path(plots_dir / 'erp.json').as_posix()
     run:
         plot_erp(input.evokeds, output.png, output.properties)
 
@@ -929,7 +907,7 @@ rule plot_dspm:
     input:
         dspm = expand(rules.group_average_dspm_sources.output.averaged_sources, condition='contrast')[0]
     output:
-        png = rules.all.input.dspm_figure
+        png = Path(plots_dir / 'dspm.png').as_posix()
     run:
         plot_dspm(dspm_path=input.dspm, png_path=output.png)
 
@@ -955,7 +933,7 @@ rule plot_lcmv:
     input:
         lcmv = expand(rules.group_average_lcmv_sources.output.averaged_sources, hemisphere=HEMISPHERES)
     output:
-        png = rules.all.input.lcmv_figure
+        png = Path(plots_dir / 'lcmv.png').as_posix()
     run:
         plot_lcmv(lcmv_path=input.lcmv, png_path=output.png)
 

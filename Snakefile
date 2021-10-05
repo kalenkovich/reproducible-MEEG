@@ -187,8 +187,10 @@ rule all:
         lcmv_stc = expand(lcmv_stc_template, subject_number=subject_numbers, hemisphere=HEMISPHERES),
         lcmv_stc_morphed = expand(lcmv_stc_morphed_template, subject_number=subject_numbers, hemisphere=HEMISPHERES),
         lcmv_stc_morphed_average = expand(lcmv_stc_averaged_template, hemisphere=HEMISPHERES),
-        erp = plots_dir / 'erp.png',
+        erp_figure = plots_dir / 'erp.png',
         erp_properties = plots_dir / 'erp.json',
+        dspm_figure = plots_dir / 'dspm.png',
+        lcmv_figure = plots_dir / 'lcmv.png',
         manuscript_html = 'report.html'
 
 
@@ -704,8 +706,9 @@ rule compute_morph_matrix:
             subjects_dir=freesurfer_dir,
             smooth=SMOOTH)
 
-        # Restore the original subject code
+        # Restore the original subject names
         morph.subject_from = f'sub-{wildcards.subject_number}'
+        morph.subject_to = 'fsaverage'
 
         morph.save(output.morph_matrix)
 
@@ -905,16 +908,72 @@ rule plot_erp:
         plot_erp(input.evokeds, output.png, output.properties)
 
 
+def plot_dspm(dspm_path, png_path):
+    stc : mne.SourceEstimate = mne.read_source_estimate(dspm_path, subject='fsaverage').magnitude()
+    lims = (1, 3, 5)  # if l_freq is None else (0.5, 1.5, 2.5)
+    stc.subject = str(Path('fsaverage/ses-mri/anat'))
+    brain_dspm = stc.plot(
+        views='ven',
+        hemi='both', 
+		backend='pyvista',
+        brain_kwargs=dict(show=False),
+        subjects_dir=freesurfer_dir,
+        initial_time=0.17, time_unit='s', background='w', figure=1,
+        clim=dict(kind='value',lims=lims), foreground='k', time_viewer=False)
+
+    brain_dspm.save_image(png_path)
+    brain_dspm.close()
+
+
+rule plot_dspm:
+    input:
+        dspm = expand(rules.group_average_dspm_sources.output.averaged_sources, condition='contrast')[0]
+    output:
+        png = rules.all.input.dspm_figure
+    run:
+        plot_dspm(dspm_path=input.dspm, png_path=output.png)
+
+
+def plot_lcmv(lcmv_path, png_path):
+    stc = mne.read_source_estimate(_get_stem(lcmv_path), subject='fsaverage')
+    lims = (0.015, 0.03, 0.045)  # if l_freq is None else (0.01, 0.02, 0.03)
+    stc.subject = str(Path('fsaverage/ses-mri/anat'))
+    brain_lcmv = stc.plot(
+        views='ven',
+        hemi='both', 
+		backend='pyvista',
+        brain_kwargs=dict(show=False),
+        subjects_dir=freesurfer_dir,
+        initial_time=0.17, time_unit='s', background='w', figure=2,
+        clim=dict(kind='value',lims=lims), foreground='k', time_viewer=False)
+
+    brain_lcmv.save_image(png_path)
+    brain_lcmv.close()
+
+
+rule plot_lcmv:
+    input:
+        lcmv = expand(rules.group_average_lcmv_sources.output.averaged_sources, hemisphere=HEMISPHERES)
+    output:
+        png = rules.all.input.lcmv_figure
+    run:
+        plot_lcmv(lcmv_path=input.lcmv, png_path=output.png)
+
+
 rule make_report:
     input:
         rmd = 'report.Rmd',
         # Converting to posix-style paths is necessary on Windows when path become part of the code as below
         erp = Path(rules.plot_erp.output.png).as_posix(),
         erp_properties = Path(rules.plot_erp.output.properties).as_posix(),
+        dspm = Path(rules.plot_dspm.output.png).as_posix(),
+        lcmv = Path(rules.plot_lcmv.output.png).as_posix(),
     output:
         'report.html'
     shell:
         ('Rscript -e "rmarkdown::render(\'{input.rmd}\', output_file = \'{output}\', params = list('
          'erp = \'{input.erp}\','
-         'erp_properties = \'{input.erp_properties}\''
+         'erp_properties = \'{input.erp_properties}\','
+         'dspm = \'{input.dspm}\','
+         'lcmv = \'{input.lcmv}\''
          '))"')
